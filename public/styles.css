@@ -1,0 +1,173 @@
+* {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.chat-message {
+    animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.typing-indicator span {
+    animation: typing 1.4s infinite;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+    30% { transform: translateY(-3px); opacity: 1; }
+}
+
+/* Message content styles */
+.message-content {
+    line-height: 1.6;
+}
+
+.message-content strong {
+    font-weight: 600;
+}
+
+.message-content pre {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 12px;
+    overflow-x: auto;
+    margin: 8px 0;
+}
+
+.message-content code {
+    background: #f9fafb;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.9em;
+    font-family: 'Courier New', monospace;
+}
+
+.message-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 0.9em;
+    background: white;
+}
+
+.message-content th {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #111827;
+}
+
+.message-content td {
+    border: 1px solid #d1d5db;
+    padding: 8px 12px;
+    color: #374151;
+}
+
+.message-content tr:hover {
+    background: #f9fafb;
+}
+
+/* Matrix / table container */
+.matrix-container {
+    position: relative;
+    margin: 16px 0;
+}
+
+/* Download buttons */
+.download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #f9fafb;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.85em;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin: 4px;
+}
+
+.download-btn:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+}
+
+.download-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* PDF report styles */
+.report-output {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 24px;
+    margin: 16px 0;
+}
+
+.report-header {
+    border-bottom: 2px solid #111827;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+}
+
+.report-header h1 {
+    font-size: 1.5em;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+}
+
+.report-header .metadata {
+    font-size: 0.85em;
+    color: #6b7280;
+    margin-top: 8px;
+}
+
+.pdf-download-section {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+    text-align: center;
+}
+
+.pdf-download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: #111827;
+    color: white;
+    border-radius: 8px;
+    font-size: 0.9em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+.pdf-download-btn:hover {
+    background: #1f2937;
+}
+
+.pdf-download-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Active module highlight */
+.module-btn.active {
+    background-color: #f3f4f6;
+    border-color: #d1d5db;
+}
