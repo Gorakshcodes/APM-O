@@ -1,7 +1,7 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -82,4 +82,5 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Relia-Bot server running on http://localhost:${PORT}`);
+  console.log(`API Key loaded: ${ANTHROPIC_API_KEY ? 'YES' : 'NO'}`);
 });
