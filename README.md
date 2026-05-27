@@ -1,6 +1,6 @@
-# Relia-Bot
+# APM-O
 
-AI Reliability Engineering Assistant powered by Claude.
+Asset Performance Management Office portal powered by Reliabot.
 
 ## Features
 
