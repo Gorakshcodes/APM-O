@@ -618,7 +618,7 @@
                 continue;
             }
 
-            output.push(lines[i]);
+            output.push(escapeHtml(lines[i]));
             i++;
         }
 
