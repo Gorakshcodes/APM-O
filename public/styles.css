@@ -59,8 +59,141 @@ body {
     transition: background 0.2s ease, color 0.2s ease;
 }
 
+body.welcome-locked {
+    overflow: hidden;
+}
+
 body.dark-mode {
     font-size: 13px;
+}
+
+.welcome-gate {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 32px;
+    background: #ffffff;
+    color: #111827;
+}
+
+.welcome-gate.is-hidden {
+    display: none;
+}
+
+.welcome-visual {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: min(100%, 980px);
+    min-height: 0;
+}
+
+.welcome-visual img {
+    display: block;
+    width: min(78vw, 720px);
+    max-height: 62vh;
+    object-fit: contain;
+}
+
+.welcome-disclaimer {
+    width: min(100%, 1040px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 18px;
+    padding: 18px 20px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    box-shadow: 0 16px 50px rgba(15, 23, 42, 0.08);
+}
+
+.welcome-disclaimer h1 {
+    margin: 0 0 6px;
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 800;
+    line-height: 1.2;
+}
+
+.welcome-disclaimer p {
+    margin: 0;
+    color: #334155;
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+.welcome-consent {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    max-width: 280px;
+    color: #0f172a;
+    font-size: 0.82rem;
+    font-weight: 650;
+    line-height: 1.35;
+}
+
+.welcome-consent input {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    accent-color: #0b5cff;
+}
+
+.welcome-agree-btn {
+    min-height: 42px;
+    padding: 0 18px;
+    border: 1px solid #0b5cff;
+    border-radius: 6px;
+    background: #0b5cff;
+    color: #ffffff;
+    font-size: 0.86rem;
+    font-weight: 800;
+    white-space: nowrap;
+    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.welcome-agree-btn:not(:disabled):hover {
+    background: #0048d8;
+    border-color: #0048d8;
+}
+
+.welcome-agree-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+@media (max-width: 860px) {
+    .welcome-gate {
+        padding: 20px;
+        justify-content: space-between;
+    }
+
+    .welcome-visual img {
+        width: min(92vw, 560px);
+        max-height: 48vh;
+    }
+
+    .welcome-disclaimer {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 16px;
+    }
+
+    .welcome-consent {
+        max-width: none;
+    }
+
+    .welcome-agree-btn {
+        width: 100%;
+    }
 }
 
 .app-header {

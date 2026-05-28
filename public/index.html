@@ -12,6 +12,24 @@
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body class="min-h-screen">
+    <section id="welcomeGate" class="welcome-gate" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle" aria-describedby="welcomeDisclaimer">
+        <div class="welcome-visual">
+            <img src="/open-apm-welcome.png" alt="Open APM powered by Reliabot">
+        </div>
+        <div class="welcome-disclaimer">
+            <div>
+                <h1 id="welcomeTitle">Open APM Disclaimer</h1>
+                <p id="welcomeDisclaimer">
+                    Open APM, powered by Reliabot, is an experimental reliability model for testing, learning, and exploratory guidance only. It is not for commercial, financial, safety, operational, or reliability decision-making. AI-generated responses may be inaccurate, incomplete, non-standard, or not aligned with global best practices and applicable standards. Qualified human review, intervention, supervision, and independent verification are required before any real-world use.
+                </p>
+            </div>
+            <label class="welcome-consent">
+                <input id="welcomeAgreeCheck" type="checkbox">
+                <span>I understand and agree that Open APM is experimental guidance only.</span>
+            </label>
+            <button id="welcomeAgreeBtn" class="welcome-agree-btn" type="button" disabled>Agree and Enter</button>
+        </div>
+    </section>
 
     <!-- Header -->
     <header class="app-header sticky top-0 z-50">

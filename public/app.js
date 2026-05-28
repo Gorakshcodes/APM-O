@@ -42,6 +42,9 @@
     const newChatBtn = document.getElementById('newChatBtn');
     const themeToggle = document.getElementById('themeToggle');
     const themeToggleLabel = document.getElementById('themeToggleLabel');
+    const welcomeGate = document.getElementById('welcomeGate');
+    const welcomeAgreeCheck = document.getElementById('welcomeAgreeCheck');
+    const welcomeAgreeBtn = document.getElementById('welcomeAgreeBtn');
 
     if (window.pdfjsLib) {
         window.pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -49,6 +52,7 @@
     }
 
     // ── Event listeners ────────────────────────────────────────────────
+    initWelcomeGate();
     sendBtn.addEventListener('click', function () {
         if (isGenerating) {
             stopResponse();
@@ -96,6 +100,27 @@
             if (sidebarTogglePath) {
                 sidebarTogglePath.setAttribute('d', collapsed ? 'M9 5l7 7-7 7' : 'M15 19l-7-7 7-7');
             }
+        });
+    }
+
+    function initWelcomeGate() {
+        if (!welcomeGate || !welcomeAgreeCheck || !welcomeAgreeBtn) return;
+
+        var accepted = localStorage.getItem('open-apm-disclaimer-accepted') === 'true';
+        document.body.classList.toggle('welcome-locked', !accepted);
+        welcomeGate.classList.toggle('is-hidden', accepted);
+        welcomeAgreeBtn.disabled = !welcomeAgreeCheck.checked;
+
+        welcomeAgreeCheck.addEventListener('change', function () {
+            welcomeAgreeBtn.disabled = !welcomeAgreeCheck.checked;
+        });
+
+        welcomeAgreeBtn.addEventListener('click', function () {
+            if (!welcomeAgreeCheck.checked) return;
+            localStorage.setItem('open-apm-disclaimer-accepted', 'true');
+            welcomeGate.classList.add('is-hidden');
+            document.body.classList.remove('welcome-locked');
+            userInput.focus();
         });
     }
 
