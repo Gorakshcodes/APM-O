@@ -205,15 +205,15 @@ body.dark-mode {
 .bot-avatar img {
     display: block;
     object-fit: contain;
-    background: var(--logo-bg);
+    background: transparent;
 }
 
 .app-logo {
     width: 38px;
     height: 38px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 3px;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
 }
 
 .app-title {
@@ -459,15 +459,15 @@ textarea::placeholder {
 .bot-avatar {
     width: 32px;
     height: 32px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--logo-bg);
+    border-radius: 0;
+    border: 0;
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
     margin-top: 2px;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .user-avatar {
@@ -492,7 +492,7 @@ textarea::placeholder {
 .bot-avatar img {
     width: 100%;
     height: 100%;
-    padding: 2px;
+    padding: 0;
 }
 
 .system-message {

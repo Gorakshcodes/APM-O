@@ -106,10 +106,10 @@
     function initWelcomeGate() {
         if (!welcomeGate || !welcomeAgreeCheck || !welcomeAgreeBtn) return;
 
-        var accepted = localStorage.getItem('open-apm-disclaimer-accepted') === 'true';
-        document.body.classList.toggle('welcome-locked', !accepted);
-        welcomeGate.classList.toggle('is-hidden', accepted);
-        welcomeAgreeBtn.disabled = !welcomeAgreeCheck.checked;
+        welcomeAgreeCheck.checked = false;
+        welcomeAgreeBtn.disabled = true;
+        welcomeGate.classList.remove('is-hidden');
+        document.body.classList.add('welcome-locked');
 
         welcomeAgreeCheck.addEventListener('change', function () {
             welcomeAgreeBtn.disabled = !welcomeAgreeCheck.checked;
@@ -117,7 +117,6 @@
 
         welcomeAgreeBtn.addEventListener('click', function () {
             if (!welcomeAgreeCheck.checked) return;
-            localStorage.setItem('open-apm-disclaimer-accepted', 'true');
             welcomeGate.classList.add('is-hidden');
             document.body.classList.remove('welcome-locked');
             userInput.focus();
