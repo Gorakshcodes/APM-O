@@ -241,7 +241,7 @@ body.dark-mode {
 
 .app-layout {
     display: grid;
-    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-columns: 235px minmax(0, 1fr);
     gap: 28px;
     transition: grid-template-columns 0.2s ease;
 }
