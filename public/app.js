@@ -11,6 +11,7 @@
     let suppressAbortNotice = false;
     let requestSerial = 0;
     let activeRequestSerial = 0;
+    let longResponseTimers = [];
 
     const MODULE_NAMES = {
         eca: 'Equipment Criticality Analysis',
@@ -244,9 +245,11 @@
         renderAttachmentList();
 
         showTypingIndicator();
+        startLongResponseNotices();
 
         try {
             const data = await callAPI(requestController.signal);
+            clearLongResponseNotices();
             removeTypingIndicator();
 
             if (activeRequestSerial !== requestId) return;
@@ -264,6 +267,7 @@
                 addBotMessage('I apologize, but I received an empty response. Please try again.');
             }
         } catch (err) {
+            clearLongResponseNotices();
             removeTypingIndicator();
             if (activeRequestSerial !== requestId) return;
             if (err.name === 'AbortError') {
@@ -291,6 +295,7 @@
             currentAbortController.abort();
         }
         activeRequestSerial = 0;
+        clearLongResponseNotices();
         removeTypingIndicator();
         setGeneratingState(false);
         if (wasGenerating && !options.silent) {
@@ -557,8 +562,31 @@
         if (el) el.remove();
     }
 
+    function startLongResponseNotices() {
+        clearLongResponseNotices();
+        longResponseTimers.push(setTimeout(function () {
+            if (isGenerating) {
+                addSystemMessage('This request is taking longer because Reliabot may be doing deeper analysis. You can wait for the full work, or stop and ask for a quick sample or narrower scope.');
+            }
+        }, 14000));
+        longResponseTimers.push(setTimeout(function () {
+            if (isGenerating) {
+                addSystemMessage('Still working. For complex reports, standards checks, or document review, Reliabot can continue longer. Stop only if you want to reduce the scope.');
+            }
+        }, 45000));
+    }
+
+    function clearLongResponseNotices() {
+        longResponseTimers.forEach(function (timer) {
+            clearTimeout(timer);
+        });
+        longResponseTimers = [];
+    }
+
     // ── Markdown formatting ────────────────────────────────────────────
     function formatMessage(text) {
+        text = normalizeMathText(text);
+
         // Tables first (before other replacements touch the pipe chars)
         text = convertMarkdownTables(text);
 
@@ -586,6 +614,38 @@
         text = text.replace(/\n/g, '<br>');
 
         return text;
+    }
+
+    function normalizeMathText(text) {
+        return text
+            .replace(/\$\$([\s\S]*?)\$\$/g, function (_, expr) {
+                return formatPlainFormula(expr);
+            })
+            .replace(/\\\[([\s\S]*?)\\\]/g, function (_, expr) {
+                return formatPlainFormula(expr);
+            })
+            .replace(/\\\(([\s\S]*?)\\\)/g, function (_, expr) {
+                return formatPlainFormula(expr);
+            })
+            .replace(/\$([^$\n]+)\$/g, function (_, expr) {
+                return formatPlainFormula(expr);
+            });
+    }
+
+    function formatPlainFormula(expr) {
+        return expr
+            .replace(/\\text\{([^{}]*)\}/g, '$1')
+            .replace(/\\mathrm\{([^{}]*)\}/g, '$1')
+            .replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, '$1 / $2')
+            .replace(/\\lambda/g, 'lambda')
+            .replace(/\\times/g, 'x')
+            .replace(/\\div/g, '/')
+            .replace(/\\cdot/g, 'x')
+            .replace(/\\left|\\right/g, '')
+            .replace(/\\[a-zA-Z]+/g, '')
+            .replace(/[{}]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
     }
 
     function containsMarkdownTable(text) {

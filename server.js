@@ -10,7 +10,16 @@ const REQUEST_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX || 20);
 const MAX_MESSAGES = Number(process.env.MAX_CHAT_MESSAGES || 24);
 const MAX_MESSAGE_CHARS = Number(process.env.MAX_MESSAGE_CHARS || 50_000);
 const MAX_TOTAL_CHARS = Number(process.env.MAX_TOTAL_CHARS || 80_000);
-const API_TIMEOUT_MS = Number(process.env.API_TIMEOUT_MS || 45_000);
+const API_TIMEOUT_MS = Number(process.env.API_TIMEOUT_MS || 0);
+const FAST_MODEL = process.env.RELIABOT_FAST_MODEL || 'claude-haiku-4-5-20251001';
+const BALANCED_MODEL = process.env.RELIABOT_BALANCED_MODEL || 'claude-sonnet-4-6';
+const DEEP_MODEL = process.env.RELIABOT_DEEP_MODEL || 'claude-opus-4-7';
+const FALLBACK_MODEL = process.env.RELIABOT_FALLBACK_MODEL || 'claude-sonnet-4-20250514';
+const WEB_SEARCH_TOOL_TYPE = process.env.RELIABOT_WEB_SEARCH_TOOL_TYPE || 'web_search_20250305';
+const BLOCKED_WEB_DOMAINS = (process.env.RELIABOT_BLOCKED_WEB_DOMAINS || 'mpedia.ir,dl.mpedia.ir,wikipedia.org')
+  .split(',')
+  .map((domain) => domain.trim())
+  .filter(Boolean);
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -52,6 +61,10 @@ When responding:
 - Format responses clearly with headers, bullet points, and tables when needed
 - If creating analyses, show actual data and calculations, not just templates
 - Always produce concrete outputs that the user can use directly
+- For simple definitions, formulas, examples, greetings, and short questions, answer directly and briefly. Do not expand into a full report unless the user asks for one.
+- Write formulas in plain English or simple mathematical notation that a normal browser can display, for example "MTBF = Total Operating Time / Number of Failures". Do not use LaTeX, TeX, MathML, "$$", "\\(...\\)", "\\[...\\]", "\\frac{}", "\\text{}", or other math-renderer syntax.
+- For broad or long-running work, first offer a compact option and a full-work option when scope is unclear or likely to take significant time.
+- If the request is unclear, illogical, technically inconsistent, missing asset/process context, or not reliability-engineering sound, ask one concise clarification question before doing analysis.
 - For FMEA, FMECA, RCM, and RCM2 requests, prepare the answer as a formal report that is ready for Excel and PDF export.
 - Use standard Markdown tables for all report registers so the browser can render them as on-screen tables and export them to Excel. Do not use code blocks for report tables.
 - Use professional Excel-report style sections: Report Header, Executive Summary, Asset/System Definition, Assumptions, Methodology/Standard, Analysis Register, Recommended Maintenance Plan, Action Tracker, and Review/Approval.
@@ -63,6 +76,7 @@ When responding:
 - Use current dates from the active system date. Do not copy historical dates from examples, samples, or uploaded report templates unless the user explicitly asks to preserve those dates.
 - When the user attaches files, treat the extracted attachment content as source material. Read it before answering, cite the file names used, and base the report on the attached data where relevant.
 - If an attached file or user request involves complex, safety-critical, environmental, production-critical, maintenance-strategy, financial, or approval-ready decisions and required context is missing, ask one concise clarification question and stop. Wait for the user's answer before preparing the final report.
+- Use web search only when the user needs current/latest information, asks to verify sources online, requests standards/documents beyond general knowledge, or asks for citations. Prefer official standards bodies, regulator pages, OEM/public manuals, and authoritative technical sources. Do not reproduce copyrighted standards text; summarize relevant requirements and cite source pages.
 - Use the attached sample FMEA report format as the default report reference for FMEA, FMECA, RCM, and similar analyses: cover/report header, document number/revision/date, prepared/reviewed/approved fields, equipment/service/standard metadata, rating scale table, RPN classification, main analysis worksheet, RPN priority summary, FMECA criticality fields where applicable, RCM decision worksheet, task type legend, maintenance strategy summary, notes/assumptions, generated timestamp, applicable standards, and internal-use footer.
 - FMEA/FMECA tables must include columns such as Item/Function, Functional Failure, Failure Mode, Cause, Effect, Existing Controls, Severity, Occurrence, Detection, RPN, Criticality, Recommended Action, Owner, and Target Date.
 - RCM tables must include columns such as Function, Functional Failure, Failure Mode, Failure Effect, Consequence Category, Task Type, Proposed Task, Frequency, Trade/Owner, Acceptance Criteria, and Reference Standard.
@@ -220,6 +234,188 @@ function brandedIdentityResponse() {
   };
 }
 
+function getLatestUserMessage(messages) {
+  return [...messages].reverse().find((message) => message.role === 'user');
+}
+
+function classifyRequest(messages) {
+  const latestUserMessage = getLatestUserMessage(messages);
+  const latestText = latestUserMessage?.content || '';
+  const normalized = latestText.toLowerCase();
+  const hasAttachment = normalized.includes('attached file context:');
+  const wordCount = latestText.trim().split(/\s+/).filter(Boolean).length;
+  const wantsReport = /\b(report|fmea|fmeca|rcm|rcm2|rca|root cause|criticality|eca|weibull|survival analysis|maintenance strategy|audit|review|pdf|excel|worksheet|matrix|register)\b/.test(normalized);
+  const wantsDeepWork = /\b(full|complete|comprehensive|detailed|approval|management|formal|all|end-to-end|procedure|strategy|plan)\b/.test(normalized);
+  const wantsCurrentSources = /\b(latest|current|today|recent|updated|new|202[5-9]|web|online|search|source|sources|cite|citation|verify|standard|standards|document|documents|manual|regulation|iso|iec|sae|api\s+\d|nfpa|osha)\b/.test(normalized);
+  const isSmallSample = /\b(sample|example|formula|definition|define|what is|how to calculate|quick|brief)\b/.test(normalized) && wordCount < 80 && !hasAttachment;
+  const isSimple = !hasAttachment && !wantsDeepWork && (isSmallSample || (wordCount <= 28 && !wantsReport && !wantsCurrentSources));
+  const shouldClarify = shouldAskForScope(normalized, wordCount, hasAttachment);
+
+  if (shouldClarify) {
+    return {
+      type: 'clarify',
+      model: FAST_MODEL,
+      maxTokens: 420,
+      enableWebSearch: false,
+      instruction: 'Ask one concise clarification question. Do not prepare the final report yet.'
+    };
+  }
+
+  if (isSimple) {
+    return {
+      type: 'fast',
+      model: FAST_MODEL,
+      maxTokens: 900,
+      enableWebSearch: false,
+      instruction: 'Use a fast concise answer. Keep it short unless the user asks for a report.'
+    };
+  }
+
+  if (wantsCurrentSources) {
+    return {
+      type: wantsDeepWork || hasAttachment ? 'deep-web' : 'balanced-web',
+      model: wantsDeepWork || hasAttachment ? DEEP_MODEL : BALANCED_MODEL,
+      maxTokens: wantsDeepWork || hasAttachment ? 7000 : 3000,
+      enableWebSearch: true,
+      webMaxUses: wantsDeepWork || hasAttachment ? 4 : 2,
+      instruction: 'Use web search selectively for current or source-grounded information. Cite sources and keep the answer scoped to the user request.'
+    };
+  }
+
+  if (wantsReport || wantsDeepWork || hasAttachment) {
+    return {
+      type: 'deep',
+      model: wantsDeepWork || hasAttachment ? DEEP_MODEL : BALANCED_MODEL,
+      maxTokens: wantsDeepWork || hasAttachment ? 7000 : 4500,
+      enableWebSearch: false,
+      instruction: 'Do the requested reliability engineering work. If the scope is too broad, ask a concise clarification question instead of guessing.'
+    };
+  }
+
+  return {
+    type: 'balanced',
+    model: BALANCED_MODEL,
+    maxTokens: 1800,
+    enableWebSearch: false,
+    instruction: 'Answer directly and avoid unnecessary report formatting.'
+  };
+}
+
+function shouldAskForScope(normalized, wordCount, hasAttachment) {
+  if (hasAttachment) return false;
+
+  const bareReportRequest = /\b(make|create|prepare|generate|do)\b.*\b(report|fmea|fmeca|rcm|rca|criticality|eca)\b/.test(normalized) && wordCount < 16;
+  const vagueSystemRequest = /\b(analyze|review|assess|study)\b.*\b(equipment|asset|system|machine|pump|compressor|motor)\b/.test(normalized) && wordCount < 12;
+  const impossibleCertainty = /\b(guarantee|prove exactly|zero risk|100% safe|no failure ever|perfect maintenance)\b/.test(normalized);
+  const missingCriticalContext = /\b(safety critical|approval ready|final recommendation|shutdown|trip|explosion|fire|fatality|environmental)\b/.test(normalized) &&
+    !/\b(asset|equipment|failure|site|operating|history|evidence|data|standard)\b/.test(normalized);
+
+  return bareReportRequest || vagueSystemRequest || impossibleCertainty || missingCriticalContext;
+}
+
+function scopeClarificationResponse() {
+  return {
+    id: 'scope-clarification',
+    type: 'message',
+    role: 'assistant',
+    content: [{
+      type: 'text',
+      text: 'Please clarify the scope before I prepare the analysis: what asset/system, failure scenario, operating context, and output depth do you want? For a faster response, ask for a quick sample; for full work, provide asset data and say “full report”.'
+    }]
+  };
+}
+
+function buildRequestBody(messages, route) {
+  const body = {
+    model: route.model,
+    max_tokens: route.maxTokens,
+    system: `${SYSTEM_PROMPT}\n\nRuntime response mode: ${route.type}. ${route.instruction}\n\nCurrent report date: ${getCurrentReportDate()} (Asia/Riyadh). Use this as the generated date, report date, and default document date unless the user provides a specific date.`,
+    messages
+  };
+
+  if (route.enableWebSearch) {
+    body.tools = [{
+      type: WEB_SEARCH_TOOL_TYPE,
+      name: 'web_search',
+      max_uses: route.webMaxUses || 2,
+      blocked_domains: BLOCKED_WEB_DOMAINS
+    }];
+  }
+
+  return body;
+}
+
+function getCandidateModels(primaryModel) {
+  return Array.from(new Set([primaryModel, BALANCED_MODEL, FALLBACK_MODEL].filter(Boolean)));
+}
+
+async function callModelWithFallback(route, messages, signal) {
+  let lastStatus = 500;
+  let lastStatusText = 'Model request failed';
+
+  for (const model of getCandidateModels(route.model)) {
+    const body = buildRequestBody(messages, { ...route, model });
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return appendCitationSummary(data);
+    }
+
+    lastStatus = response.status;
+    lastStatusText = response.statusText;
+    const errorBody = await response.text().catch(() => '');
+    console.error(`Reliabot model route failed (${route.type}, ${model}): ${response.status} ${errorBody.slice(0, 500)}`);
+
+    if (!shouldTryFallback(response.status, errorBody)) break;
+  }
+
+  const error = new Error(`Model request failed: ${lastStatus} ${lastStatusText}`);
+  error.status = lastStatus;
+  throw error;
+}
+
+function shouldTryFallback(status, body) {
+  const normalized = String(body || '').toLowerCase();
+  return status === 400 || status === 404 || normalized.includes('model') || normalized.includes('tool') || normalized.includes('not found');
+}
+
+function appendCitationSummary(data) {
+  if (!data || !Array.isArray(data.content)) return data;
+  const sources = [];
+  const seen = new Set();
+
+  for (const block of data.content) {
+    if (!block || !Array.isArray(block.citations)) continue;
+    for (const citation of block.citations) {
+      if (!citation || !citation.url || seen.has(citation.url)) continue;
+      seen.add(citation.url);
+      sources.push({
+        title: citation.title || citation.url,
+        url: citation.url
+      });
+    }
+  }
+
+  if (sources.length > 0) {
+    data.content.push({
+      type: 'text',
+      text: '\n\nSources:\n' + sources.map((source) => `- ${source.title}: ${source.url}`).join('\n')
+    });
+  }
+
+  return data;
+}
+
 function blockedPromptExtractionResponse() {
   return {
     id: 'security-blocked',
@@ -255,7 +451,7 @@ app.post('/api/chat', async (req, res) => {
     return res.status(400).json({ error: validationError });
   }
 
-  const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+  const latestUserMessage = getLatestUserMessage(messages);
   if (latestUserMessage && looksLikeImplementationQuestion(latestUserMessage.content)) {
     return res.json(brandedIdentityResponse());
   }
@@ -264,44 +460,33 @@ app.post('/api/chat', async (req, res) => {
     return res.json(blockedPromptExtractionResponse());
   }
 
+  const route = classifyRequest(messages);
+  if (route.type === 'clarify') {
+    return res.json(scopeClarificationResponse());
+  }
+
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  const timeout = API_TIMEOUT_MS > 0 ? setTimeout(() => controller.abort(), API_TIMEOUT_MS) : null;
+  let requestFinished = false;
+  const abortOnClientAbort = () => {
+    if (!requestFinished) controller.abort();
+  };
+  req.on('aborted', abortOnClientAbort);
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        system: `${SYSTEM_PROMPT}\n\nCurrent report date: ${getCurrentReportDate()} (Asia/Riyadh). Use this as the generated date, report date, and default document date unless the user provides a specific date.`,
-        messages
-      })
-    });
-
-    if (!response.ok) {
-      console.error(`Anthropic API error: ${response.status}`);
-      return res.status(response.status).json({
-        error: `API request failed: ${response.status} ${response.statusText}`
-      });
-    }
-
-    const data = await response.json();
+    const data = await callModelWithFallback(route, messages, controller.signal);
     res.json(data);
   } catch (err) {
     if (err.name === 'AbortError') {
-      return res.status(504).json({ error: 'Reliabot request timed out. Please try again.' });
+      return res.status(504).json({ error: 'Reliabot is still working on this request. Please continue with a narrower scope or retry with a full-work request.' });
     }
 
     console.error('Server error:', err.message);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(err.status || 500).json({ error: 'Reliabot could not complete the request. Please try a smaller scope or ask for a full report with more context.' });
   } finally {
-    clearTimeout(timeout);
+    requestFinished = true;
+    req.off('aborted', abortOnClientAbort);
+    if (timeout) clearTimeout(timeout);
   }
 });
 
