@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reliabot Admin</title>
+    <link rel="stylesheet" href="/styles.css?v=20260605-admin-disable-users">
+</head>
+<body class="admin-page">
+    <main class="admin-shell">
+        <section class="admin-header">
+            <div>
+                <h1>Reliabot Admin</h1>
+                <p>Visitor details, searches, and available location signals.</p>
+            </div>
+            <form id="adminTokenForm" class="admin-token-form">
+                <input id="adminToken" type="password" placeholder="Admin token" autocomplete="current-password" required>
+                <button type="submit">Load</button>
+            </form>
+        </section>
+
+        <section class="admin-section">
+            <h2>Visitors</h2>
+            <div class="admin-table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Company</th>
+                            <th>Status</th>
+                            <th>Queries</th>
+                            <th>Input Tokens</th>
+                            <th>Output Tokens</th>
+                            <th>Total Tokens</th>
+                            <th>Location</th>
+                            <th>IP</th>
+                            <th>First Seen</th>
+                            <th>Last Seen</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="visitorsBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="admin-section">
+            <h2>Search / Chat Activity</h2>
+            <div class="admin-table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>User</th>
+                            <th>Company</th>
+                            <th>Module</th>
+                            <th>Query</th>
+                            <th>Input Tokens</th>
+                            <th>Output Tokens</th>
+                            <th>Total Tokens</th>
+                            <th>Status</th>
+                            <th>Location</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activityBody"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+    <script src="/admin.js?v=20260605-admin-disable-users"></script>
+</body>
+</html>

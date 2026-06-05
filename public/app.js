@@ -22,11 +22,11 @@
     };
 
     const MODULE_CONTEXT = {
-        eca: 'Using the Equipment Criticality Analysis module. Return a tabulated, report-ready output with Markdown tables suitable for Excel and PDF export: ',
-        rcm: 'Using the RCM/FMEA Analysis module. Prepare a formal standard Excel-style and PDF-ready report. Show the on-screen output in clean Markdown tables with sections for report header, executive summary, FMEA/RCM register, maintenance plan, action tracker, and review/approval: ',
-        rca: 'Using the Root Cause Analysis module. Prepare a standard colored business-style RCA report with report header, current date, incident summary, evidence table, timeline, 5-Why analysis table, and applicable Figma-style diagrams such as Ishikawa/fishbone cause-category diagrams, fault-tree blocks, or action-flow visuals. Diagrams must use colorful section headers, solid connectors, rounded labeled boxes, and business-report styling. Do not use dotted diagrams, ASCII art, text-only tree drawings, or code-block diagrams. Include root cause statement, corrective and preventive action plan, verification plan, owners, due dates, and review/approval section. Use Markdown tables for screen display and export: ',
-        analytics: 'Using the Reliability Analytics module. Return calculations and results in tabulated report format suitable for Excel and PDF export: ',
-        review: 'Using the Report Quality Review module. Return findings in a tabulated audit report format with severity, evidence, recommendation, owner, and status columns: '
+        eca: 'Using the Equipment Criticality Analysis module. Return a complete tabulated, report-ready output with Markdown tables suitable for Excel and PDF export. Do not include diagrams unless the user explicitly requests them. Complete all core sections before ending: ',
+        rcm: 'Using the RCM/FMEA Analysis module. Prepare a complete formal Excel-style and PDF-ready report. Show the on-screen output in clean Markdown tables with sections for report header, executive summary, FMEA/RCM register, maintenance plan, action tracker, review/approval, and export notes. Do not include diagrams unless the user explicitly requests them. Avoid naming protected technical publications, proprietary methods, or branded frameworks unless the user explicitly provides the name and asks for source-specific context. Complete the report before ending: ',
+        rca: 'Using the Root Cause Analysis module. Prepare a complete polished business-style RCA report with report header, current date, incident summary, evidence table, timeline, 5-Why analysis table, and mandatory RCA-only Figma/FigJam-ready visual diagrams for the downloadable report export, such as 5-Why flow, fishbone cause-category diagram, fault-tree blocks, or action-flow visuals. Diagrams must use high-contrast text, clear section headers, solid connectors, rounded labeled boxes, and business-report styling. Do not use low-contrast text, dotted diagrams, ASCII art, text-only tree drawings, ordinary code-block diagrams, proprietary method names, or named technical publications. Include each diagram in this exact wrapper so the app can place it in the report export: [RCA_DIAGRAM: Diagram Title], then Mermaid graph LR syntax with quoted node labels, then [/RCA_DIAGRAM]. Do not expand large diagrams in the chat body. Add an end note saying RCA visual diagrams are included in the downloadable report export and are not expanded in the chat window. Include root cause statement, corrective and preventive action plan, verification plan, owners, due dates, review/approval section, and export notes. Complete the report before ending. Use Markdown tables for screen display and export: ',
+        analytics: 'Using the Reliability Analytics module. Return complete calculations and results in tabulated report format suitable for Excel and PDF export. Do not include diagrams unless the user explicitly requests them: ',
+        review: 'Using the Report Quality Review module. Return complete findings in a tabulated audit report format with severity, evidence, recommendation, owner, and status columns. Do not include diagrams unless the user explicitly requests them: '
     };
 
     // ── DOM references ─────────────────────────────────────────────────
@@ -44,6 +44,11 @@
     const themeToggle = document.getElementById('themeToggle');
     const themeToggleLabel = document.getElementById('themeToggleLabel');
     const welcomeGate = document.getElementById('welcomeGate');
+    const visitorForm = document.getElementById('visitorForm');
+    const visitorFormStatus = document.getElementById('visitorFormStatus');
+    const visitorName = document.getElementById('visitorName');
+    const visitorEmail = document.getElementById('visitorEmail');
+    const visitorCompany = document.getElementById('visitorCompany');
     const welcomeAgreeCheck = document.getElementById('welcomeAgreeCheck');
     const welcomeAgreeBtn = document.getElementById('welcomeAgreeBtn');
 
@@ -105,7 +110,7 @@
     }
 
     function initWelcomeGate() {
-        if (!welcomeGate || !welcomeAgreeCheck || !welcomeAgreeBtn) return;
+        if (!welcomeGate || !welcomeAgreeCheck || !welcomeAgreeBtn || !visitorForm) return;
 
         welcomeAgreeCheck.checked = false;
         welcomeAgreeBtn.disabled = true;
@@ -116,12 +121,72 @@
             welcomeAgreeBtn.disabled = !welcomeAgreeCheck.checked;
         });
 
-        welcomeAgreeBtn.addEventListener('click', function () {
+        visitorForm.addEventListener('submit', async function (event) {
+            event.preventDefault();
             if (!welcomeAgreeCheck.checked) return;
-            welcomeGate.classList.add('is-hidden');
-            document.body.classList.remove('welcome-locked');
-            userInput.focus();
+            await registerVisitor();
         });
+    }
+
+    async function registerVisitor() {
+        setVisitorStatus('Saving your details...');
+        welcomeAgreeBtn.disabled = true;
+        try {
+            var location = await getVisitorLocation();
+            var response = await fetch('/api/visitor/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: visitorName.value,
+                    email: visitorEmail.value,
+                    company: visitorCompany.value,
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+                    locale: navigator.language || '',
+                    latitude: location && location.latitude,
+                    longitude: location && location.longitude,
+                    accuracy: location && location.accuracy
+                })
+            });
+            var data = await response.json().catch(function () { return {}; });
+            if (!response.ok) {
+                setVisitorStatus(data.error || 'Could not save your details.');
+                welcomeAgreeBtn.disabled = !welcomeAgreeCheck.checked;
+                return;
+            }
+            enterApp();
+        } catch (err) {
+            setVisitorStatus(err.message || 'Could not save your details.');
+            welcomeAgreeBtn.disabled = !welcomeAgreeCheck.checked;
+        }
+    }
+
+    function getVisitorLocation() {
+        return new Promise(function (resolve) {
+            if (!navigator.geolocation) return resolve(null);
+            navigator.geolocation.getCurrentPosition(function (position) {
+                resolve({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                    accuracy: position.coords.accuracy
+                });
+            }, function () {
+                resolve(null);
+            }, {
+                enableHighAccuracy: false,
+                timeout: 3500,
+                maximumAge: 600000
+            });
+        });
+    }
+
+    function setVisitorStatus(text) {
+        if (visitorFormStatus) visitorFormStatus.textContent = text;
+    }
+
+    function enterApp() {
+        welcomeGate.classList.add('is-hidden');
+        document.body.classList.remove('welcome-locked');
+        userInput.focus();
     }
 
     // ── Module selection ───────────────────────────────────────────────
@@ -177,12 +242,12 @@
                 '<p class="mt-3">I can help you with:</p>' +
                 '<ul class="mt-2 space-y-1 ml-4">' +
                     '<li>&bull; Equipment Criticality Analysis (ECA) with 5x5 risk matrix</li>' +
-                    '<li>&bull; Reliability Centered Maintenance (RCM/RCM2) per SAE JA1011</li>' +
+                    '<li>&bull; Reliability Centered Maintenance (RCM) task selection</li>' +
                     '<li>&bull; FMEA/FMECA Analysis with RPN calculations</li>' +
-                    '<li>&bull; Root Cause Analysis (5-Whys, Ishikawa, TapRooT, Apollo, FTA)</li>' +
+                    '<li>&bull; Root Cause Analysis (5-Whys, fishbone cause analysis, fault tree analysis)</li>' +
                     '<li>&bull; Reliability Analytics (Weibull, MTBF/MTTR, Survival Analysis)</li>' +
                 '</ul>' +
-                '<p class="mt-3 muted-text">Select a capability, attach source files, or ask for a standard FMEA, RCM, RCA, ECA, or reliability report.</p>' +
+                '<p class="mt-3 muted-text">Select a capability, attach source files, or ask for a structured FMEA, RCM, RCA, ECA, or reliability report.</p>' +
             '</div>';
         chatMessages.appendChild(div);
         scrollToBottom();
@@ -308,7 +373,7 @@
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: conversationHistory }),
+            body: JSON.stringify({ messages: conversationHistory, module: currentModule || 'general' }),
             signal: signal
         });
 
@@ -402,7 +467,8 @@
             '- Read the attached file context before answering.',
             '- Use the uploaded sample report format as a reference for FMEA, FMECA, RCM, and related reports.',
             '- If the question is complex, safety-critical, production-critical, approval-ready, or missing key asset/process details, ask one concise clarification question and wait for the user before producing the final report.',
-            '- When preparing downloadable reports, follow the sample style: document header, revision/date, prepared/reviewed/approved fields, equipment/service/standard metadata, rating scale, RPN classification, main worksheet, RPN summary, RCM decision worksheet where relevant, task legend, maintenance strategy summary, notes, assumptions, and internal-use footer.'
+            '- When preparing downloadable reports, follow the sample style: document header, revision/date, prepared/reviewed/approved fields, equipment/service/guidance metadata, rating scale, RPN classification, main worksheet, RPN summary, maintenance decision worksheet where relevant, task legend, maintenance strategy summary, notes, assumptions, and internal-use footer.',
+            '- Avoid naming protected technical publications, proprietary methods, or branded frameworks unless the user explicitly provides the name and asks for source-specific context.'
         ].join('\n');
     }
 
@@ -571,7 +637,7 @@
         }, 14000));
         longResponseTimers.push(setTimeout(function () {
             if (isGenerating) {
-                addSystemMessage('Still working. For complex reports, standards checks, or document review, Reliabot can continue longer. Stop only if you want to reduce the scope.');
+                addSystemMessage('Still working. For complex reports, source checks, or document review, Reliabot can continue longer. Stop only if you want to reduce the scope.');
             }
         }, 45000));
     }
@@ -586,6 +652,8 @@
     // ── Markdown formatting ────────────────────────────────────────────
     function formatMessage(text) {
         text = normalizeMathText(text);
+        var rcaDiagrams = [];
+        text = extractRcaDiagramBlocks(text, rcaDiagrams);
 
         // Tables first (before other replacements touch the pipe chars)
         text = convertMarkdownTables(text);
@@ -612,8 +680,125 @@
 
         // Line breaks
         text = text.replace(/\n/g, '<br>');
+        text = restoreRcaDiagramBlocks(text, rcaDiagrams);
 
         return text;
+    }
+
+    function extractRcaDiagramBlocks(text, diagrams) {
+        return text.replace(/\[RCA_DIAGRAM:\s*([^\]]+)\]([\s\S]*?)\[\/RCA_DIAGRAM\]/gi, function (_, title, syntax) {
+            var token = '@@RCA_DIAGRAM_' + diagrams.length + '@@';
+            diagrams.push(buildRcaDiagramHtml(title, syntax));
+            return token;
+        });
+    }
+
+    function restoreRcaDiagramBlocks(text, diagrams) {
+        diagrams.forEach(function (html, index) {
+            text = text.replace('@@RCA_DIAGRAM_' + index + '@@', html);
+        });
+        return text;
+    }
+
+    function buildRcaDiagramHtml(title, syntax) {
+        var parsed = parseMermaidFlow(syntax);
+        var note = '<div class="rca-diagram-chat-note">' +
+            '<strong>RCA diagram prepared for report export:</strong> ' + escapeHtml(title) +
+            '. The visual diagram is included in the downloadable PDF report and is not expanded in the chat window.' +
+        '</div>';
+        if (!parsed.nodes.length) {
+            return note + '<section class="rca-figma-diagram" data-title="' + escapeHtml(title) + '">' +
+                '<div class="rca-diagram-header">' + escapeHtml(title) + '</div>' +
+                '<div class="rca-diagram-empty">Diagram data unavailable</div>' +
+            '</section>';
+        }
+
+        var html = note + '<section class="rca-figma-diagram" data-title="' + escapeHtml(title) + '">' +
+            '<div class="rca-diagram-header">' + escapeHtml(title) + '</div>' +
+            '<div class="rca-diagram-canvas">';
+
+        parsed.nodes.forEach(function (node, index) {
+            html += '<div class="rca-diagram-node" data-node="' + escapeHtml(node.id) + '">' +
+                '<span class="rca-node-index">' + (index + 1) + '</span>' +
+                '<span>' + escapeHtml(node.label) + '</span>' +
+            '</div>';
+            if (index < parsed.nodes.length - 1) {
+                html += '<div class="rca-diagram-arrow" aria-hidden="true"></div>';
+            }
+        });
+
+        html += '</div>';
+
+        if (parsed.edges.length) {
+            html += '<div class="rca-diagram-links">';
+            parsed.edges.slice(0, 10).forEach(function (edge) {
+                html += '<span>' + escapeHtml(edge.fromLabel) + ' -> ' + escapeHtml(edge.toLabel) + '</span>';
+            });
+            html += '</div>';
+        }
+
+        html += '</section>';
+        return html;
+    }
+
+    function parseMermaidFlow(syntax) {
+        var nodeMap = {};
+        var order = [];
+        var edges = [];
+        String(syntax || '').split(/\r?\n/).forEach(function (line) {
+            var trimmed = line.trim();
+            if (!trimmed || /^(graph|flowchart)\s+/i.test(trimmed)) return;
+            var edge = parseMermaidEdge(trimmed);
+            if (!edge) {
+                var nodeOnly = trimmed.match(/^([A-Za-z0-9_]+)\s*\[("[^"]+"|'[^']+'|[^\]]+)\]/);
+                if (nodeOnly) addDiagramNode(nodeOnly[1], cleanDiagramLabel(nodeOnly[2]), nodeMap, order);
+                return;
+            }
+            addDiagramNode(edge.from.id, edge.from.label, nodeMap, order);
+            addDiagramNode(edge.to.id, edge.to.label, nodeMap, order);
+            edges.push({ from: edge.from.id, to: edge.to.id, fromLabel: nodeMap[edge.from.id].label, toLabel: nodeMap[edge.to.id].label });
+        });
+
+        return {
+            nodes: order.map(function (id) { return nodeMap[id]; }),
+            edges: edges
+        };
+    }
+
+    function parseMermaidEdge(line) {
+        var parts = line.split(/--(?:>|[^-]*-->)|==>/);
+        if (parts.length < 2) return null;
+        var from = parseMermaidNode(parts[0]);
+        var to = parseMermaidNode(parts.slice(1).join('-->'));
+        if (!from || !to) return null;
+        return { from: from, to: to };
+    }
+
+    function parseMermaidNode(token) {
+        var cleaned = String(token || '').trim().replace(/^\|[^|]*\|/, '').trim();
+        var match = cleaned.match(/^([A-Za-z0-9_]+)(?:\s*\[("[^"]+"|'[^']+'|[^\]]+)\])?/);
+        if (!match) return null;
+        return {
+            id: match[1],
+            label: match[2] ? cleanDiagramLabel(match[2]) : match[1]
+        };
+    }
+
+    function addDiagramNode(id, label, nodeMap, order) {
+        if (!nodeMap[id]) {
+            nodeMap[id] = { id: id, label: label || id };
+            order.push(id);
+        } else if (label && nodeMap[id].label === id) {
+            nodeMap[id].label = label;
+        }
+    }
+
+    function cleanDiagramLabel(label) {
+        return String(label || '')
+            .replace(/^["']|["']$/g, '')
+            .replace(/^\[/, '')
+            .replace(/\]$/, '')
+            .trim();
     }
 
     function normalizeMathText(text) {
@@ -760,29 +945,53 @@
         var wb = XLSX.utils.book_new();
         var generatedAt = getReportDateParts();
         var title = getReportTitle(el);
+        wb.Props = {
+            Title: title,
+            Subject: 'Reliability engineering report',
+            Author: 'Reliabot',
+            Company: 'APM-O',
+            CreatedDate: new Date()
+        };
 
         var coverData = [
-            ['APM-O Business Report'],
+            ['APM-O BUSINESS REPORT'],
+            [],
             ['Report Title', title],
             ['Generated Date', generatedAt.displayDate],
             ['Generated Time', generatedAt.displayTime],
             ['Prepared By', 'Reliabot'],
             ['Portal', 'APM-O'],
-            ['Export Format', 'Business-style Excel workbook'],
+            ['Export Format', 'Business Excel workbook'],
+            ['Review Status', 'For qualified engineering review'],
             [],
             ['Workbook Notes'],
-            ['Each analysis table is exported as a separate worksheet for filtering, review, approval, and business sharing.']
+            ['Each analysis table is exported as a separate worksheet for filtering, review, approval, and business sharing.'],
+            ['Use the register sheets for action tracking, owner assignment, and close-out review.'],
+            [],
+            ['Sheet Index']
         ];
+        Array.from(tables).forEach(function (table, index) {
+            coverData.push([index + 1, getSheetName(table, index)]);
+        });
         var coverSheet = XLSX.utils.aoa_to_sheet(coverData);
-        coverSheet['!cols'] = [{ wch: 24 }, { wch: 70 }];
+        coverSheet['!cols'] = [{ wch: 24 }, { wch: 86 }];
+        coverSheet['!freeze'] = { xSplit: 0, ySplit: 2 };
+        coverSheet['!autofilter'] = { ref: 'A14:B' + Math.max(14, coverData.length) };
+        applyWorksheetStyleHints(coverSheet, coverData.length, 2);
         XLSX.utils.book_append_sheet(wb, coverSheet, 'Report Info');
 
         Array.from(tables).forEach(function (table, index) {
             var wsData = [];
+            var sectionTitle = getSheetName(table, index);
+            var generatedAtText = generatedAt.displayDate + ' ' + generatedAt.displayTime;
 
             var headers = Array.from(table.querySelectorAll('thead th')).map(function (th) {
                 return th.textContent.trim();
             });
+            wsData.push([sectionTitle]);
+            wsData.push(['Report Title', title]);
+            wsData.push(['Generated', generatedAtText]);
+            wsData.push([]);
             if (headers.length > 0) wsData.push(headers);
 
             table.querySelectorAll('tbody tr').forEach(function (row) {
@@ -794,21 +1003,60 @@
 
             var ws = XLSX.utils.aoa_to_sheet(wsData);
 
-            // Auto-size columns
+            var range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1');
+            ws['!freeze'] = { xSplit: 0, ySplit: 5 };
+            if (headers.length > 0) {
+                var filterRange = {
+                    s: { r: 4, c: 0 },
+                    e: { r: Math.max(4, range.e.r), c: Math.max(0, headers.length - 1) }
+                };
+                ws['!autofilter'] = { ref: XLSX.utils.encode_range(filterRange) };
+            }
+
             var colWidths = [];
             wsData.forEach(function (row) {
                 row.forEach(function (cell, i) {
                     var len = cell ? cell.toString().length : 10;
-                    colWidths[i] = Math.max(colWidths[i] || 10, len + 2);
+                    colWidths[i] = Math.max(colWidths[i] || 12, Math.min(len + 3, 58));
                 });
             });
-            ws['!cols'] = colWidths.map(function (w) { return { wch: Math.min(w, 50) }; });
+            ws['!cols'] = colWidths.map(function (w) { return { wch: Math.max(12, Math.min(w, 58)) }; });
+            applyWorksheetStyleHints(ws, wsData.length, headers.length || 1, 4);
 
             var sheetName = getUniqueSheetName(wb, getSheetName(table, index));
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
         });
 
         XLSX.writeFile(wb, sanitizeFileName(title || 'APM-O_Report') + '_' + generatedAt.fileDate + '.xlsx');
+    }
+
+    function applyWorksheetStyleHints(ws, rowCount, colCount, headerRowIndex) {
+        if (!ws || !ws['!ref']) return;
+        var range = XLSX.utils.decode_range(ws['!ref']);
+        var headerRow = typeof headerRowIndex === 'number' ? headerRowIndex : range.s.r;
+        for (var row = range.s.r; row <= range.e.r; row++) {
+            for (var col = range.s.c; col <= range.e.c; col++) {
+                var address = XLSX.utils.encode_cell({ r: row, c: col });
+                var cell = ws[address];
+                if (!cell) continue;
+                cell.s = cell.s || {};
+                cell.s.alignment = { vertical: 'top', wrapText: true };
+                if (row === range.s.r) {
+                    cell.s.font = { bold: true, color: { rgb: 'FF0F172A' }, sz: 15 };
+                    cell.s.fill = { fgColor: { rgb: 'FFE0F2FE' } };
+                    cell.s.alignment = { vertical: 'center', wrapText: true };
+                } else if (row === headerRow) {
+                    cell.s.font = { bold: true, color: { rgb: 'FFFFFFFF' } };
+                    cell.s.fill = { fgColor: { rgb: 'FF0F172A' } };
+                    cell.s.alignment = { vertical: 'center', wrapText: true };
+                } else if (row > headerRow && (row - headerRow) % 2 === 0) {
+                    cell.s.fill = { fgColor: { rgb: 'FFF8FAFC' } };
+                }
+            }
+        }
+        ws['!rows'] = Array.from({ length: Math.max(rowCount, 1) }, function (_, index) {
+            return { hpt: index === 0 ? 28 : index === headerRow ? 24 : 34 };
+        });
     }
 
     function getReportTitle(el) {
@@ -897,9 +1145,16 @@
         btn.disabled = true;
 
         try {
-            var cloned = el.cloneNode(true);
             var title = getReportTitle(el);
             var generatedAt = getReportDateParts();
+            var jsPDF = window.jspdf.jsPDF;
+            var pdfOrientation = hasWideReportTable(el) ? 'landscape' : 'portrait';
+            var pdf = new jsPDF({ orientation: pdfOrientation, unit: 'mm', format: 'a4' });
+            renderBusinessPdf(pdf, el, title, generatedAt);
+            pdf.save(sanitizeFileName(title || 'APM-O_Report') + '_' + generatedAt.fileDate + '.pdf');
+            return;
+
+            var cloned = el.cloneNode(true);
 
             var container = document.createElement('div');
             container.style.position = 'absolute';
@@ -921,7 +1176,7 @@
                     '<div>' +
                         '<div style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#0f766e;">APM-O</div>' +
                         '<h1 style="font-size:27px;font-weight:800;color:#111827;margin:7px 0 0;line-height:1.18;">' + escapeHtml(title) + '</h1>' +
-                        '<div style="font-size:12px;color:#374151;margin-top:7px;font-weight:600;">Powered by Reliabot</div>' +
+                        '<div style="font-size:12px;color:#111827;margin-top:7px;font-weight:700;">Powered by Reliabot</div>' +
                     '</div>' +
                     '<table style="width:270px;border-collapse:collapse;font-size:11px;margin:0;color:#111827;">' +
                         '<tr><th style="text-align:left;background:#e0f2fe;border:1px solid #7dd3fc;padding:7px;color:#0f172a;">Document</th><td style="border:1px solid #bae6fd;padding:7px;color:#111827;">Business Report</td></tr>' +
@@ -967,11 +1222,11 @@
             ftr.style.paddingTop = '16px';
             ftr.style.marginTop = '32px';
             ftr.style.fontSize = '10px';
-            ftr.style.color = '#475569';
+            ftr.style.color = '#111827';
             ftr.style.textAlign = 'center';
             ftr.innerHTML =
                 'This report was generated from APM-O, powered by Reliabot.<br>' +
-                'Analysis follows industry standards: SAE JA1011 (RCM), IEC 60812 (FMEA), ISO 14224 (Failure Data)';
+                'Analysis follows recognized reliability engineering guidance and should be verified by qualified personnel before real-world use.';
             container.appendChild(ftr);
 
             document.body.appendChild(container);
@@ -986,7 +1241,6 @@
             document.body.removeChild(container);
 
             var imgData = canvas.toDataURL('image/png');
-            var jsPDF = window.jspdf.jsPDF;
             var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
             var imgWidth = 210;
@@ -1012,6 +1266,343 @@
         } finally {
             btn.innerHTML = originalHTML;
             btn.disabled = false;
+        }
+    }
+
+    function hasWideReportTable(el) {
+        return Array.from(el.getElementsByTagName('table')).some(function (table) {
+            var headerCount = table.querySelectorAll('thead th').length;
+            if (headerCount > 0) return headerCount > 7;
+            var firstRow = table.querySelector('tr');
+            return firstRow && firstRow.children.length > 7;
+        });
+    }
+
+    function renderBusinessPdf(pdf, sourceEl, title, generatedAt) {
+        var page = {
+            width: pdf.internal.pageSize.getWidth(),
+            height: pdf.internal.pageSize.getHeight(),
+            marginX: 16,
+            top: 18,
+            bottom: 18,
+            continuationTitle: title || 'Reliability Engineering Report'
+        };
+        var y = drawPdfHeader(pdf, page, title, generatedAt);
+        var skippedTitle = false;
+        getPdfBlocks(sourceEl).forEach(function (block) {
+            if (!skippedTitle && block.type === 'heading' && cleanPdfText(block.text).toLowerCase() === cleanPdfText(title).toLowerCase()) {
+                skippedTitle = true;
+                return;
+            }
+            if (block.type === 'table') {
+                y = drawPdfTable(pdf, page, block, y);
+            } else if (block.type === 'diagram') {
+                y = drawPdfDiagram(pdf, page, block, y);
+            } else {
+                y = drawPdfTextBlock(pdf, page, block, y);
+            }
+        });
+        addPdfFooters(pdf, page);
+    }
+
+    function drawPdfHeader(pdf, page, title, generatedAt) {
+        pdf.setFillColor(15, 23, 42);
+        pdf.rect(0, 0, page.width, 30, 'F');
+        pdf.setFillColor(13, 148, 136);
+        pdf.rect(0, 30, page.width, 1.8, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.text('APM-O BUSINESS REPORT', page.marginX, 10);
+        pdf.setFontSize(16);
+        pdf.text(pdf.splitTextToSize(title || 'Reliability Engineering Report', 138), page.marginX, 20);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.text('Powered by Reliabot', page.width - page.marginX, 10, { align: 'right' });
+        pdf.text(generatedAt.displayDate, page.width - page.marginX, 16, { align: 'right' });
+        pdf.text(generatedAt.displayTime, page.width - page.marginX, 22, { align: 'right' });
+        return 42;
+    }
+
+    function drawPdfContinuationHeader(pdf, page) {
+        pdf.setFillColor(15, 23, 42);
+        pdf.rect(0, 0, page.width, 12, 'F');
+        pdf.setFillColor(13, 148, 136);
+        pdf.rect(0, 12, page.width, 1.2, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8.5);
+        pdf.text(pdf.splitTextToSize(page.continuationTitle, page.width - page.marginX * 2 - 42), page.marginX, 8);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text('Powered by Reliabot', page.width - page.marginX, 8, { align: 'right' });
+        return 23;
+    }
+
+    function getPdfBlocks(sourceEl) {
+        var blocks = [];
+        Array.from(sourceEl.children).forEach(function (node) {
+            collectPdfBlocks(node, blocks);
+        });
+        return blocks;
+    }
+
+    function collectPdfBlocks(node, blocks) {
+        if (!node || node.nodeType !== 1) return;
+        var tag = node.tagName;
+        if (node.classList && node.classList.contains('rca-figma-diagram')) {
+            blocks.push(extractPdfDiagram(node));
+            return;
+        }
+        if (/^H[1-3]$/.test(tag)) {
+            blocks.push({ type: 'heading', level: Number(tag.slice(1)), text: cleanPdfText(node.textContent) });
+            return;
+        }
+        if (tag === 'TABLE') {
+            blocks.push(extractPdfTable(node));
+            return;
+        }
+        if (tag === 'UL' || tag === 'OL') {
+            Array.from(node.children).forEach(function (li) {
+                blocks.push({ type: 'list', text: cleanPdfText(li.textContent) });
+            });
+            return;
+        }
+        if (tag === 'P' || tag === 'DIV') {
+            if (node.querySelector('table, h1, h2, h3, ul, ol')) {
+                Array.from(node.children).forEach(function (child) {
+                    collectPdfBlocks(child, blocks);
+                });
+                return;
+            }
+            var text = cleanPdfText(node.textContent);
+            if (text) blocks.push({ type: 'paragraph', text: text });
+            return;
+        }
+        Array.from(node.children).forEach(function (child) {
+            collectPdfBlocks(child, blocks);
+        });
+    }
+
+    function extractPdfTable(table) {
+        var headers = Array.from(table.querySelectorAll('thead th')).map(function (cell) {
+            return cleanPdfText(cell.textContent);
+        });
+        var rows = Array.from(table.querySelectorAll('tbody tr')).map(function (row) {
+            return Array.from(row.querySelectorAll('td')).map(function (cell) {
+                return cleanPdfText(cell.textContent);
+            });
+        });
+        if (headers.length === 0) {
+            var firstRow = table.querySelector('tr');
+            headers = firstRow ? Array.from(firstRow.children).map(function (cell) {
+                return cleanPdfText(cell.textContent);
+            }) : [];
+        }
+        return { type: 'table', headers: headers, rows: rows };
+    }
+
+    function extractPdfDiagram(node) {
+        var title = node.getAttribute('data-title') || cleanPdfText((node.querySelector('.rca-diagram-header') || {}).textContent);
+        var nodes = Array.from(node.querySelectorAll('.rca-diagram-node')).map(function (item) {
+            return cleanPdfText(item.textContent).replace(/^\d+\s*/, '');
+        });
+        return { type: 'diagram', title: title || 'RCA Diagram', nodes: nodes };
+    }
+
+    function cleanPdfText(text) {
+        return String(text || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function drawPdfTextBlock(pdf, page, block, y) {
+        var maxWidth = page.width - page.marginX * 2;
+        var text = block.type === 'list' ? '- ' + block.text : block.text;
+        if (!text) return y;
+        if (block.type === 'heading') {
+            var headingSize = block.level === 1 ? 15 : block.level === 2 ? 12.5 : 10.8;
+            y = ensurePdfSpace(pdf, page, y, headingSize + 8);
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(headingSize);
+            pdf.setTextColor(block.level === 1 ? 15 : block.level === 2 ? 12 : 13, block.level === 1 ? 23 : block.level === 2 ? 74 : 105, block.level === 1 ? 42 : block.level === 2 ? 110 : 98);
+            var headingLines = pdf.splitTextToSize(text, maxWidth);
+            if (block.level === 2) {
+                pdf.setFillColor(236, 253, 245);
+                pdf.setDrawColor(20, 184, 166);
+                pdf.rect(page.marginX - 2, y - 5.5, maxWidth + 4, Math.max(9, headingLines.length * 5.2 + 3), 'FD');
+            } else if (block.level === 1) {
+                pdf.setDrawColor(13, 148, 136);
+                pdf.setLineWidth(0.7);
+                pdf.line(page.marginX, y + headingLines.length * 5.4 + 1.5, page.marginX + Math.min(maxWidth, 82), y + headingLines.length * 5.4 + 1.5);
+            }
+            pdf.text(headingLines, page.marginX, y);
+            return y + headingLines.length * (block.level === 1 ? 5.8 : 5.2) + 5;
+        }
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9.4);
+        pdf.setTextColor(15, 23, 42);
+        var lines = pdf.splitTextToSize(text, maxWidth);
+        y = ensurePdfSpace(pdf, page, y, lines.length * 4.9 + 3);
+        pdf.text(lines, page.marginX, y);
+        return y + lines.length * 4.9 + 2.5;
+    }
+
+    function drawPdfTable(pdf, page, table, y) {
+        if (!table.headers.length) return y;
+        var usableWidth = page.width - page.marginX * 2;
+        var colCount = Math.max(table.headers.length, 1);
+        var colWidths = calculatePdfColumnWidths(table, usableWidth);
+        var compactTable = colCount > 8;
+        var headerHeight = compactTable ? 11 : 10;
+        var bodyFontSize = compactTable ? 6.6 : 7.4;
+        var bodyLineHeight = compactTable ? 3.35 : 4;
+        y = ensurePdfSpace(pdf, page, y, headerHeight + 12);
+        drawPdfTableHeader(pdf, page, table.headers, y, colWidths, headerHeight);
+        y += headerHeight;
+        table.rows.forEach(function (row, rowIndex) {
+            var originalY = y;
+            var cellLines = table.headers.map(function (_, index) {
+                return pdf.splitTextToSize(row[index] || '', colWidths[index] - 3.4);
+            });
+            var rowHeight = Math.max(9, Math.max.apply(null, cellLines.map(function (lines) {
+                return lines.length * bodyLineHeight + 4.5;
+            })));
+            y = ensurePdfSpace(pdf, page, y, rowHeight + 6);
+            if (y < originalY) {
+                drawPdfTableHeader(pdf, page, table.headers, y, colWidths, headerHeight);
+                y += headerHeight;
+            }
+            pdf.setDrawColor(203, 213, 225);
+            if (rowIndex % 2 === 0) {
+                pdf.setFillColor(255, 255, 255);
+            } else {
+                pdf.setFillColor(248, 250, 252);
+            }
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(bodyFontSize);
+            pdf.setTextColor(15, 23, 42);
+            var x = page.marginX;
+            table.headers.forEach(function (_, index) {
+                var colWidth = colWidths[index];
+                pdf.rect(x, y, colWidth, rowHeight, 'FD');
+                pdf.text(cellLines[index], x + 1.7, y + 4.4);
+                x += colWidth;
+            });
+            y += rowHeight;
+        });
+        return y + 6;
+    }
+
+    function drawPdfDiagram(pdf, page, diagram, y) {
+        var maxWidth = page.width - page.marginX * 2;
+        var nodes = diagram.nodes.length ? diagram.nodes : ['Diagram data unavailable'];
+        var boxWidth = Math.min(42, Math.max(30, (maxWidth - Math.max(0, nodes.length - 1) * 8) / Math.min(nodes.length, 5)));
+        var boxHeight = 20;
+        var rows = [];
+        for (var i = 0; i < nodes.length; i += 5) {
+            rows.push(nodes.slice(i, i + 5));
+        }
+        var needed = 16 + rows.length * (boxHeight + 12);
+        y = ensurePdfSpace(pdf, page, y, needed);
+
+        pdf.setFillColor(15, 23, 42);
+        pdf.setDrawColor(15, 23, 42);
+        pdf.rect(page.marginX, y, maxWidth, 9, 'FD');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.text(cleanPdfText(diagram.title), page.marginX + 3, y + 6);
+        y += 14;
+
+        rows.forEach(function (row) {
+            var totalRowWidth = row.length * boxWidth + Math.max(0, row.length - 1) * 8;
+            var x = page.marginX + Math.max(0, (maxWidth - totalRowWidth) / 2);
+            row.forEach(function (label, index) {
+                pdf.setFillColor(236, 254, 255);
+                pdf.setDrawColor(13, 148, 136);
+                pdf.roundedRect(x, y, boxWidth, boxHeight, 2, 2, 'FD');
+                pdf.setTextColor(15, 23, 42);
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(6.8);
+                pdf.text(pdf.splitTextToSize(label, boxWidth - 4), x + 2, y + 5);
+                if (index < row.length - 1) {
+                    pdf.setDrawColor(15, 23, 42);
+                    pdf.setLineWidth(0.5);
+                    pdf.line(x + boxWidth + 1.5, y + boxHeight / 2, x + boxWidth + 6.5, y + boxHeight / 2);
+                    pdf.triangle(x + boxWidth + 6.5, y + boxHeight / 2 - 1.8, x + boxWidth + 6.5, y + boxHeight / 2 + 1.8, x + boxWidth + 9, y + boxHeight / 2, 'F');
+                }
+                x += boxWidth + 8;
+            });
+            y += boxHeight + 12;
+        });
+
+        return y + 2;
+    }
+
+    function calculatePdfColumnWidths(table, usableWidth) {
+        var weights = table.headers.map(function (header, index) {
+            var normalized = String(header || '').toLowerCase();
+            var sampleLength = 0;
+            table.rows.slice(0, 12).forEach(function (row) {
+                sampleLength = Math.max(sampleLength, String(row[index] || '').length);
+            });
+            if (/^(s|o|d|rpn|rating|rev|no\.?|#|id)$/i.test(header) || /\b(rating|score|severity|occurrence|detection|rpn)\b/.test(normalized)) {
+                return 0.75;
+            }
+            if (/\b(owner|date|target|frequency|status|criticality|category)\b/.test(normalized)) {
+                return 1.05;
+            }
+            if (/\b(action|effect|cause|failure|control|function|recommend|criteria|description|notes)\b/.test(normalized)) {
+                return sampleLength > 90 ? 1.75 : 1.35;
+            }
+            return sampleLength > 70 ? 1.35 : 1;
+        });
+        var totalWeight = weights.reduce(function (sum, weight) { return sum + weight; }, 0) || 1;
+        var widths = weights.map(function (weight) {
+            return usableWidth * weight / totalWeight;
+        });
+        var minWidth = table.headers.length > 8 ? 10 : 14;
+        widths = widths.map(function (width) {
+            return Math.max(minWidth, width);
+        });
+        var totalWidth = widths.reduce(function (sum, width) { return sum + width; }, 0);
+        if (totalWidth > usableWidth) {
+            var scale = usableWidth / totalWidth;
+            widths = widths.map(function (width) { return width * scale; });
+        }
+        return widths;
+    }
+
+    function drawPdfTableHeader(pdf, page, headers, y, colWidths, headerHeight) {
+        pdf.setFillColor(15, 23, 42);
+        pdf.setDrawColor(15, 23, 42);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(headers.length > 8 ? 6.8 : 7.6);
+        pdf.setTextColor(255, 255, 255);
+        var x = page.marginX;
+        headers.forEach(function (header, index) {
+            var colWidth = colWidths[index];
+            pdf.rect(x, y, colWidth, headerHeight, 'FD');
+            pdf.text(pdf.splitTextToSize(header, colWidth - 3.4), x + 1.7, y + 4.5);
+            x += colWidth;
+        });
+    }
+
+    function ensurePdfSpace(pdf, page, y, needed) {
+        if (y + needed <= page.height - page.bottom) return y;
+        pdf.addPage();
+        return drawPdfContinuationHeader(pdf, page);
+    }
+
+    function addPdfFooters(pdf, page) {
+        var total = pdf.getNumberOfPages();
+        for (var i = 1; i <= total; i++) {
+            pdf.setPage(i);
+            pdf.setDrawColor(226, 232, 240);
+            pdf.line(page.marginX, page.height - 13, page.width - page.marginX, page.height - 13);
+            pdf.setFont('helvetica', 'normal');
+            pdf.setFontSize(7.5);
+            pdf.setTextColor(15, 23, 42);
+            pdf.text('Generated from APM-O, powered by Reliabot. Verify before real-world use.', page.marginX, page.height - 8);
+            pdf.text('Page ' + i + ' of ' + total, page.width - page.marginX, page.height - 8, { align: 'right' });
         }
     }
 

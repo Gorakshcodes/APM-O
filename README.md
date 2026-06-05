@@ -5,8 +5,8 @@ Asset Performance Management Office portal powered by Reliabot.
 ## Features
 
 - **Equipment Criticality Analysis (ECA)** - 5x5 risk matrix with weighted consequence categories
-- **RCM / FMEA** - Reliability Centered Maintenance and Failure Mode & Effects Analysis (SAE JA1011)
-- **Root Cause Analysis** - TapRooT, Apollo, Fishbone, 5-Whys, Fault Tree Analysis
+- **RCM / FMEA** - Reliability Centered Maintenance and Failure Mode & Effects Analysis
+- **Root Cause Analysis** - 5-Whys, fishbone cause analysis, fault tree analysis
 - **Reliability Analytics** - Weibull analysis, MTBF/MTTR, survival analysis
 - **Report Review** - Quality audit of reliability reports
 - **Export** - Download analyses as Excel or PDF
@@ -30,6 +30,7 @@ cp .env.example .env
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 PORT=3000
+ADMIN_DASHBOARD_TOKEN=Sdvivs@407
 ```
 
 4. Start the server:
@@ -39,6 +40,15 @@ npm start
 ```
 
 5. Open `http://localhost:3000` in your browser.
+
+## Visitor Flow
+
+- Users do not need passwords.
+- On the welcome screen, users submit name, email, and company.
+- The app saves visitor details for later updates.
+- The chat API is protected server-side until the welcome registration is completed.
+- The app logs visitor chat/search queries, selected module, browser locale/timezone, available browser location, IP address, and user agent.
+- Admin can review data at `http://localhost:3000/admin.html` using `ADMIN_DASHBOARD_TOKEN`.
 
 ## Architecture
 

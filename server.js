@@ -1,7 +1,10 @@
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,6 +28,14 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .map((origin) => origin.trim())
   .filter(Boolean);
 const requestCounts = new Map();
+const AUTH_ENABLED = process.env.AUTH_ENABLED !== 'false';
+const AUTH_DATA_DIR = process.env.AUTH_DATA_DIR || path.join(__dirname, 'data');
+const AUTH_USERS_FILE = process.env.AUTH_USERS_FILE || path.join(AUTH_DATA_DIR, 'users.json');
+const SESSION_TTL_MS = Number(process.env.AUTH_SESSION_TTL_MS || 1000 * 60 * 60 * 12);
+const VISITORS_FILE = process.env.VISITORS_FILE || path.join(AUTH_DATA_DIR, 'visitors.json');
+const ADMIN_DASHBOARD_TOKEN = process.env.ADMIN_DASHBOARD_TOKEN || process.env.ADMIN_PASSWORD || (process.env.NODE_ENV === 'production' ? '' : 'Sdvivs@407');
+const sessions = new Map();
+const visitorSessions = new Map();
 
 app.disable('x-powered-by');
 app.use(appSecurityHeaders);
@@ -48,15 +59,15 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const SYSTEM_PROMPT = `You are Reliabot operating inside APM-O, an asset performance management and reliability engineering portal. You have access to a comprehensive reliability-engineering skill that covers:
 
 1. Equipment Criticality Analysis (ECA) - 5x5 risk matrix approach with weighted consequence categories
-2. Reliability Centered Maintenance (RCM/RCM2) - Following SAE JA1011 standards
+2. Reliability Centered Maintenance (RCM) - Maintenance decision logic and task selection
 3. FMEA/FMECA Analysis - With RPN calculations and maintenance task selection
-4. Root Cause Analysis - Multiple methods including TapRooT, Apollo, Fishbone, 5-Whys, and Fault Tree Analysis
+4. Root Cause Analysis - Multiple methods including 5-Whys, fishbone cause analysis, and fault tree analysis
 5. Reliability Analytics - Weibull analysis, MTBF/MTTR calculations, survival analysis
 
 When responding:
 - Use proper technical terminology from reliability engineering
 - Provide structured outputs with tables, matrices, and calculations
-- Reference industry standards (SAE JA1011, IEC 60812, ISO 14224, etc.)
+- Reference applicable engineering guidance generically without naming protected technical publications, proprietary methods, or branded frameworks unless the user explicitly provides the name and asks for source-specific context.
 - Show step-by-step analysis when appropriate
 - Format responses clearly with headers, bullet points, and tables when needed
 - If creating analyses, show actual data and calculations, not just templates
@@ -65,21 +76,36 @@ When responding:
 - Write formulas in plain English or simple mathematical notation that a normal browser can display, for example "MTBF = Total Operating Time / Number of Failures". Do not use LaTeX, TeX, MathML, "$$", "\\(...\\)", "\\[...\\]", "\\frac{}", "\\text{}", or other math-renderer syntax.
 - For broad or long-running work, first offer a compact option and a full-work option when scope is unclear or likely to take significant time.
 - If the request is unclear, illogical, technically inconsistent, missing asset/process context, or not reliability-engineering sound, ask one concise clarification question before doing analysis.
-- For FMEA, FMECA, RCM, and RCM2 requests, prepare the answer as a formal report that is ready for Excel and PDF export.
-- Use standard Markdown tables for all report registers so the browser can render them as on-screen tables and export them to Excel. Do not use code blocks for report tables.
-- Use professional Excel-report style sections: Report Header, Executive Summary, Asset/System Definition, Assumptions, Methodology/Standard, Analysis Register, Recommended Maintenance Plan, Action Tracker, and Review/Approval.
+- For FMEA, FMECA, and RCM requests, prepare the answer as a formal report that is ready for Excel and PDF export.
+- For report requests, deliver the complete report in one response whenever possible. Do not stop after only an executive summary or partial table. Include all required sections, core registers, action plan, assumptions, review/approval fields, and export notes before ending.
+- For very large report scopes, produce a compact but complete report rather than an unfinished long report: include representative rows, clear assumptions, and an action register, then state what additional source data would be needed for expansion.
+- Use Markdown tables for all report registers so the browser can render them as on-screen tables and export them to Excel. Do not use code blocks for report tables.
+- Use professional Excel-report style sections: Report Header, Executive Summary, Asset/System Definition, Assumptions, Methodology/Guidance, Analysis Register, Recommended Maintenance Plan, Action Tracker, and Review/Approval.
 - Write downloaded-report-ready content in a business report style: clear title, document metadata, concise executive summary, numbered findings, professional wording, action ownership, dates, review/approval rows, and no casual chat language.
+- Do not repeat the same report title multiple times, do not add decorative horizontal-rule separators, and do not use faint or low-contrast placeholder text. Keep document metadata compact, readable, and business-ready.
+- For report tables, keep cell text concise, use clear column names, and avoid over-wide narrative cells. Put long explanation in short notes below the table when that improves readability.
 - When the user asks for a report, assume it may be downloaded as PDF or Excel and make the structure polished enough for sharing with management, maintenance, operations, and reliability teams.
-- For RCA and RCA report requests, prepare a polished colored business-style report with incident metadata, executive summary, problem statement, evidence register, timeline, 5-Why table, Ishikawa/fishbone cause-category diagram or matrix, root cause statement, contributing factors, corrective and preventive action plan, verification/effectiveness checks, owner/due-date tracking, and review/approval section.
-- RCA reports must include applicable diagrams in a clean Figma-style visual format: colorful section headers, solid connector lines, rounded labeled boxes, grouped cause categories, and professional business-report colors. Do not use dotted diagrams, ASCII art, plain text tree drawings, or code-block diagrams.
-- RCA reports must include either a 5-Why analysis or an Ishikawa/fishbone cause diagram/matrix. Include both when the issue is complex or when enough evidence is provided.
+- For RCA and RCA report requests only, prepare a polished colored business-style report with incident metadata, executive summary, problem statement, evidence register, timeline, 5-Why table, Figma/FigJam-ready visual diagram, root cause statement, contributing factors, corrective and preventive action plan, verification/effectiveness checks, owner/due-date tracking, and review/approval section.
+- RCA mode is the only mode that must proactively include Figma/FigJam-style diagrams for the downloadable report export. For every RCA report, prepare at least one report-only visual diagram section for 5-Why analysis, fishbone cause analysis, or fault-tree/action-flow logic. Use professional Figma-like visual language: high-contrast text, colorful section headers, solid connector lines, rounded labeled boxes, grouped cause categories, and business-report colors. Do not use low-contrast text, dotted diagrams, ASCII art, plain text tree drawings, or code-block diagrams.
+- For every RCA diagram, include a Figma-ready Mermaid flowchart block using this exact wrapper so the app can render it as a diagram:
+  [RCA_DIAGRAM: Short Diagram Title]
+  graph LR
+    A["Problem statement"] --> B["Why 1"]
+    B --> C["Why 2"]
+    C --> D["Why 3"]
+    D --> E["Why 4"]
+    E --> F["Root cause"]
+  [/RCA_DIAGRAM]
+- RCA reports must include either a 5-Why analysis diagram or a fishbone cause diagram/matrix in the downloadable report export. Include both when the issue is complex or when enough evidence is provided. Do not expand large diagrams in the chat body; keep diagrams inside the report-export diagram wrapper and add an end note saying: "RCA visual diagrams are included in the downloadable report export and are not expanded in the chat window."
+- For non-RCA reports, do not add diagrams unless the user explicitly asks. Use management-ready tables, registers, summaries, and action trackers instead.
 - Use current dates from the active system date. Do not copy historical dates from examples, samples, or uploaded report templates unless the user explicitly asks to preserve those dates.
 - When the user attaches files, treat the extracted attachment content as source material. Read it before answering, cite the file names used, and base the report on the attached data where relevant.
 - If an attached file or user request involves complex, safety-critical, environmental, production-critical, maintenance-strategy, financial, or approval-ready decisions and required context is missing, ask one concise clarification question and stop. Wait for the user's answer before preparing the final report.
-- Use web search only when the user needs current/latest information, asks to verify sources online, requests standards/documents beyond general knowledge, or asks for citations. Prefer official standards bodies, regulator pages, OEM/public manuals, and authoritative technical sources. Do not reproduce copyrighted standards text; summarize relevant requirements and cite source pages.
-- Use the attached sample FMEA report format as the default report reference for FMEA, FMECA, RCM, and similar analyses: cover/report header, document number/revision/date, prepared/reviewed/approved fields, equipment/service/standard metadata, rating scale table, RPN classification, main analysis worksheet, RPN priority summary, FMECA criticality fields where applicable, RCM decision worksheet, task type legend, maintenance strategy summary, notes/assumptions, generated timestamp, applicable standards, and internal-use footer.
+- Use web search only when the user needs current/latest information, asks to verify sources online, requests documents beyond general knowledge, or asks for citations. Prefer official publisher, regulator, OEM/public manual, and authoritative technical sources. Do not reproduce copyrighted text; summarize relevant requirements and cite source pages.
+- Do not proactively mention named technical publications, proprietary RCA methods, branded maintenance frameworks, or eponym/brand alternate names in user-facing answers. Use generic terms such as "recognized engineering guidance", "public technical guidance", "5-Whys", "fishbone cause analysis", "cause-and-effect diagram", "fault tree analysis", "FMEA", "FMECA", "RCM", "RCA", "RPN", "MTBF", and "MTTR".
+- Use the attached sample FMEA report format as the default report reference for FMEA, FMECA, RCM, and similar analyses: cover/report header, document number/revision/date, prepared/reviewed/approved fields, equipment/service/guidance metadata, rating scale table, RPN classification, main analysis worksheet, RPN summary, FMECA criticality fields where applicable, maintenance decision worksheet where relevant, task type legend, maintenance strategy summary, notes/assumptions, generated timestamp, applicable guidance, and internal-use footer.
 - FMEA/FMECA tables must include columns such as Item/Function, Functional Failure, Failure Mode, Cause, Effect, Existing Controls, Severity, Occurrence, Detection, RPN, Criticality, Recommended Action, Owner, and Target Date.
-- RCM tables must include columns such as Function, Functional Failure, Failure Mode, Failure Effect, Consequence Category, Task Type, Proposed Task, Frequency, Trade/Owner, Acceptance Criteria, and Reference Standard.
+- RCM tables must include columns such as Function, Functional Failure, Failure Mode, Failure Effect, Consequence Category, Task Type, Proposed Task, Frequency, Trade/Owner, Acceptance Criteria, and Reference Guidance.
 - Keep the on-screen output tabulated and report-like. Prefer compact tables and short section notes over long narrative paragraphs.
 - At the end of FMEA/RCM reports, include a short "Export Notes" section saying the output is formatted for Excel workbook sheets and PDF report generation from the app buttons.
 - Identity and model-origin questions: respond only as Reliabot, an AI assistant trained on world-class AI technology and reliability data for asset performance management. Do not name model vendors, model families, API providers, backend services, implementation details, or hosting architecture. If asked who made you, which API you use, what model powers you, or whether you are built on another assistant, give a brief branded answer and redirect to reliability-engineering support.
@@ -124,6 +150,348 @@ function isAllowedOrigin(origin) {
     return false;
   }
 }
+
+function ensureAuthStore() {
+  if (!fs.existsSync(AUTH_DATA_DIR)) {
+    fs.mkdirSync(AUTH_DATA_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(AUTH_USERS_FILE)) {
+    fs.writeFileSync(AUTH_USERS_FILE, JSON.stringify({ users: [] }, null, 2));
+  }
+  const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (adminEmail && adminPassword) {
+    const store = readUsersStore();
+    const existing = store.users.find((user) => user.email === adminEmail);
+    if (!existing) {
+      store.users.push({
+        email: adminEmail,
+        role: 'admin',
+        status: 'active',
+        passwordHash: hashPassword(adminPassword),
+        mustChangePassword: false,
+        createdAt: new Date().toISOString(),
+        approvedAt: new Date().toISOString()
+      });
+      writeUsersStore(store);
+    }
+  }
+}
+
+function readUsersStore() {
+  ensureAuthStoreFileOnly();
+  try {
+    const parsed = JSON.parse(fs.readFileSync(AUTH_USERS_FILE, 'utf8'));
+    if (!Array.isArray(parsed.users)) return { users: [] };
+    return parsed;
+  } catch {
+    return { users: [] };
+  }
+}
+
+function ensureAuthStoreFileOnly() {
+  if (!fs.existsSync(AUTH_DATA_DIR)) {
+    fs.mkdirSync(AUTH_DATA_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(AUTH_USERS_FILE)) {
+    fs.writeFileSync(AUTH_USERS_FILE, JSON.stringify({ users: [] }, null, 2));
+  }
+}
+
+function writeUsersStore(store) {
+  ensureAuthStoreFileOnly();
+  fs.writeFileSync(AUTH_USERS_FILE, JSON.stringify(store, null, 2));
+}
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  return `scrypt:${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  const parts = String(storedHash || '').split(':');
+  if (parts.length !== 3 || parts[0] !== 'scrypt') return false;
+  const hash = crypto.scryptSync(String(password), parts[1], 64);
+  const expected = Buffer.from(parts[2], 'hex');
+  return expected.length === hash.length && crypto.timingSafeEqual(expected, hash);
+}
+
+function createSession(email) {
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, {
+    email,
+    expiresAt: Date.now() + SESSION_TTL_MS
+  });
+  return token;
+}
+
+function parseCookies(req) {
+  return String(req.headers.cookie || '').split(';').reduce((cookies, pair) => {
+    const index = pair.indexOf('=');
+    if (index === -1) return cookies;
+    const key = pair.slice(0, index).trim();
+    const value = pair.slice(index + 1).trim();
+    if (key) cookies[key] = decodeURIComponent(value);
+    return cookies;
+  }, {});
+}
+
+function setSessionCookie(res, token) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `reliabot_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}${secure}`);
+}
+
+function clearSessionCookie(res) {
+  res.setHeader('Set-Cookie', 'reliabot_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+}
+
+function getAuthenticatedUser(req) {
+  if (!AUTH_ENABLED) return { email: 'local-dev', role: 'admin', status: 'active' };
+  const token = parseCookies(req).reliabot_session;
+  if (!token) return null;
+  const session = sessions.get(token);
+  if (!session || session.expiresAt < Date.now()) {
+    sessions.delete(token);
+    return null;
+  }
+  const store = readUsersStore();
+  const user = store.users.find((item) => item.email === session.email && item.status === 'active');
+  if (!user) return null;
+  session.expiresAt = Date.now() + SESSION_TTL_MS;
+  return user;
+}
+
+function requireAuth(req, res, next) {
+  const user = getAuthenticatedUser(req);
+  if (!user) return res.status(401).json({ error: 'Login required' });
+  req.authUser = user;
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  const user = getAuthenticatedUser(req);
+  if (!user) return res.status(401).json({ error: 'Login required' });
+  if (user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  req.authUser = user;
+  next();
+}
+
+function generateTemporaryPassword() {
+  return crypto.randomBytes(9).toString('base64url') + 'A1!';
+}
+
+function getMailTransporter() {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    }
+  });
+}
+
+async function sendMail({ to, subject, text }) {
+  const transporter = getMailTransporter();
+  if (!transporter) {
+    console.log(`Email not sent; SMTP is not configured. Intended recipient: ${to}. Subject: ${subject}`);
+    return false;
+  }
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || `"Reliabot" <${process.env.SMTP_USER}>`,
+    to,
+    subject,
+    text
+  });
+  return true;
+}
+
+function publicUser(user) {
+  return {
+    email: user.email,
+    role: user.role,
+    status: user.status,
+    mustChangePassword: Boolean(user.mustChangePassword),
+    createdAt: user.createdAt,
+    approvedAt: user.approvedAt
+  };
+}
+
+ensureAuthStore();
+
+function ensureVisitorsStore() {
+  if (!fs.existsSync(AUTH_DATA_DIR)) {
+    fs.mkdirSync(AUTH_DATA_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(VISITORS_FILE)) {
+    fs.writeFileSync(VISITORS_FILE, JSON.stringify({ visitors: [], activities: [] }, null, 2));
+  }
+}
+
+function readVisitorsStore() {
+  ensureVisitorsStore();
+  try {
+    const parsed = JSON.parse(fs.readFileSync(VISITORS_FILE, 'utf8'));
+    return {
+      visitors: Array.isArray(parsed.visitors) ? parsed.visitors : [],
+      activities: Array.isArray(parsed.activities) ? parsed.activities : []
+    };
+  } catch {
+    return { visitors: [], activities: [] };
+  }
+}
+
+function writeVisitorsStore(store) {
+  ensureVisitorsStore();
+  fs.writeFileSync(VISITORS_FILE, JSON.stringify({
+    visitors: store.visitors || [],
+    activities: store.activities || []
+  }, null, 2));
+}
+
+function getClientIp(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwarded || req.socket.remoteAddress || req.ip || '';
+}
+
+function setVisitorCookie(res, visitorId) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `reliabot_visitor=${encodeURIComponent(visitorId)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${60 * 60 * 24 * 365}${secure}`);
+}
+
+function getVisitorFromRequest(req) {
+  const visitorId = parseCookies(req).reliabot_visitor;
+  if (!visitorId) return null;
+  const store = readVisitorsStore();
+  return store.visitors.find((visitor) => visitor.id === visitorId) || null;
+}
+
+function requireVisitor(req, res, next) {
+  const visitor = getVisitorFromRequest(req);
+  if (!visitor) return res.status(403).json({ error: 'Please complete the welcome registration before using Reliabot.' });
+  if (visitor.status === 'disabled') return res.status(403).json({ error: 'This user has been disabled by admin.' });
+  req.visitor = visitor;
+  next();
+}
+
+function sanitizeShortText(value, maxLength) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, maxLength);
+}
+
+function publicVisitor(visitor, summary = {}) {
+  return {
+    id: visitor.id,
+    name: visitor.name,
+    email: visitor.email,
+    company: visitor.company,
+    status: visitor.status || 'active',
+    disabledAt: visitor.disabledAt || '',
+    disabledBy: visitor.disabledBy || '',
+    createdAt: visitor.createdAt,
+    lastSeenAt: visitor.lastSeenAt,
+    location: visitor.location,
+    network: visitor.network,
+    queryCount: summary.queryCount || 0,
+    inputTokens: summary.inputTokens || 0,
+    outputTokens: summary.outputTokens || 0,
+    cacheTokens: summary.cacheTokens || 0,
+    totalTokens: summary.totalTokens || 0
+  };
+}
+
+function logVisitorActivity(req, type, detail, meta = {}) {
+  const visitor = req.visitor || getVisitorFromRequest(req);
+  if (!visitor) return null;
+  const store = readVisitorsStore();
+  const activity = {
+    id: crypto.randomBytes(10).toString('hex'),
+    visitorId: visitor.id,
+    email: visitor.email,
+    name: visitor.name,
+    company: visitor.company,
+    type,
+    detail,
+    module: req.body && req.body.module ? sanitizeShortText(req.body.module, 40) : '',
+    createdAt: new Date().toISOString(),
+    location: visitor.location,
+    network: visitor.network,
+    usage: meta.usage || null,
+    responseStatus: meta.responseStatus || '',
+    responsePreview: meta.responsePreview || ''
+  };
+  store.activities.unshift(activity);
+  store.activities = store.activities.slice(0, 2000);
+  const existing = store.visitors.find((item) => item.id === visitor.id);
+  if (existing) existing.lastSeenAt = new Date().toISOString();
+  writeVisitorsStore(store);
+  return activity;
+}
+
+function summarizeVisitorUsage(store) {
+  return store.activities.reduce((summary, activity) => {
+    if (!activity || activity.type !== 'chat_query') return summary;
+    const visitorId = activity.visitorId;
+    if (!visitorId) return summary;
+    if (!summary[visitorId]) {
+      summary[visitorId] = {
+        queryCount: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheTokens: 0,
+        totalTokens: 0
+      };
+    }
+    const usage = activity.usage || {};
+    const inputTokens = Number(usage.inputTokens || 0);
+    const outputTokens = Number(usage.outputTokens || 0);
+    const cacheTokens = Number(usage.cacheCreationInputTokens || 0) + Number(usage.cacheReadInputTokens || 0);
+    summary[visitorId].queryCount += 1;
+    summary[visitorId].inputTokens += inputTokens;
+    summary[visitorId].outputTokens += outputTokens;
+    summary[visitorId].cacheTokens += cacheTokens;
+    summary[visitorId].totalTokens += inputTokens + outputTokens + cacheTokens;
+    return summary;
+  }, {});
+}
+
+function normalizeUsage(usage) {
+  usage = usage || {};
+  const inputTokens = Number(usage.input_tokens || usage.inputTokens || 0);
+  const outputTokens = Number(usage.output_tokens || usage.outputTokens || 0);
+  const cacheCreationInputTokens = Number(usage.cache_creation_input_tokens || usage.cacheCreationInputTokens || 0);
+  const cacheReadInputTokens = Number(usage.cache_read_input_tokens || usage.cacheReadInputTokens || 0);
+  return {
+    inputTokens,
+    outputTokens,
+    cacheCreationInputTokens,
+    cacheReadInputTokens,
+    totalTokens: inputTokens + outputTokens + cacheCreationInputTokens + cacheReadInputTokens
+  };
+}
+
+function requireAdminDashboard(req, res, next) {
+  if (!ADMIN_DASHBOARD_TOKEN) {
+    return res.status(403).json({ error: 'ADMIN_DASHBOARD_TOKEN is not configured.' });
+  }
+  const token = req.headers['x-admin-token'] || req.query.token;
+  if (String(token || '') !== ADMIN_DASHBOARD_TOKEN) {
+    return res.status(401).json({ error: 'Admin token required.' });
+  }
+  next();
+}
+
+ensureVisitorsStore();
 
 function getClientId(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
@@ -244,9 +612,9 @@ function classifyRequest(messages) {
   const normalized = latestText.toLowerCase();
   const hasAttachment = normalized.includes('attached file context:');
   const wordCount = latestText.trim().split(/\s+/).filter(Boolean).length;
-  const wantsReport = /\b(report|fmea|fmeca|rcm|rcm2|rca|root cause|criticality|eca|weibull|survival analysis|maintenance strategy|audit|review|pdf|excel|worksheet|matrix|register)\b/.test(normalized);
+  const wantsReport = /\b(report|fmea|fmeca|rcm|rca|root cause|criticality|eca|weibull|survival analysis|maintenance strategy|audit|review|pdf|excel|worksheet|matrix|register)\b/.test(normalized);
   const wantsDeepWork = /\b(full|complete|comprehensive|detailed|approval|management|formal|all|end-to-end|procedure|strategy|plan)\b/.test(normalized);
-  const wantsCurrentSources = /\b(latest|current|today|recent|updated|new|202[5-9]|web|online|search|source|sources|cite|citation|verify|standard|standards|document|documents|manual|regulation|iso|iec|sae|api\s+\d|nfpa|osha)\b/.test(normalized);
+  const wantsCurrentSources = /\b(latest|current|today|recent|updated|new|202[5-9]|web|online|search|source|sources|cite|citation|verify|guidance|document|documents|manual|regulation)\b/.test(normalized);
   const isSmallSample = /\b(sample|example|formula|definition|define|what is|how to calculate|quick|brief)\b/.test(normalized) && wordCount < 80 && !hasAttachment;
   const isSimple = !hasAttachment && !wantsDeepWork && (isSmallSample || (wordCount <= 28 && !wantsReport && !wantsCurrentSources));
   const shouldClarify = shouldAskForScope(normalized, wordCount, hasAttachment);
@@ -275,7 +643,7 @@ function classifyRequest(messages) {
     return {
       type: wantsDeepWork || hasAttachment ? 'deep-web' : 'balanced-web',
       model: wantsDeepWork || hasAttachment ? DEEP_MODEL : BALANCED_MODEL,
-      maxTokens: wantsDeepWork || hasAttachment ? 7000 : 3000,
+      maxTokens: wantsDeepWork || hasAttachment ? 14000 : 6000,
       enableWebSearch: true,
       webMaxUses: wantsDeepWork || hasAttachment ? 4 : 2,
       instruction: 'Use web search selectively for current or source-grounded information. Cite sources and keep the answer scoped to the user request.'
@@ -286,9 +654,9 @@ function classifyRequest(messages) {
     return {
       type: 'deep',
       model: wantsDeepWork || hasAttachment ? DEEP_MODEL : BALANCED_MODEL,
-      maxTokens: wantsDeepWork || hasAttachment ? 7000 : 4500,
+      maxTokens: wantsDeepWork || hasAttachment ? 14000 : 10000,
       enableWebSearch: false,
-      instruction: 'Do the requested reliability engineering work. If the scope is too broad, ask a concise clarification question instead of guessing.'
+      instruction: 'Do the requested reliability engineering work and complete the report. Include all core sections, tables, assumptions, action items, review/approval fields, and export notes. If the scope is too broad, ask a concise clarification question instead of guessing.'
     };
   }
 
@@ -308,7 +676,7 @@ function shouldAskForScope(normalized, wordCount, hasAttachment) {
   const vagueSystemRequest = /\b(analyze|review|assess|study)\b.*\b(equipment|asset|system|machine|pump|compressor|motor)\b/.test(normalized) && wordCount < 12;
   const impossibleCertainty = /\b(guarantee|prove exactly|zero risk|100% safe|no failure ever|perfect maintenance)\b/.test(normalized);
   const missingCriticalContext = /\b(safety critical|approval ready|final recommendation|shutdown|trip|explosion|fire|fatality|environmental)\b/.test(normalized) &&
-    !/\b(asset|equipment|failure|site|operating|history|evidence|data|standard)\b/.test(normalized);
+    !/\b(asset|equipment|failure|site|operating|history|evidence|data|guidance)\b/.test(normalized);
 
   return bareReportRequest || vagueSystemRequest || impossibleCertainty || missingCriticalContext;
 }
@@ -368,7 +736,8 @@ async function callModelWithFallback(route, messages, signal) {
 
     if (response.ok) {
       const data = await response.json();
-      return appendCitationSummary(data);
+      const completedData = await continueIfNeeded(route, messages, data, signal, model);
+      return appendCitationSummary(completedData);
     }
 
     lastStatus = response.status;
@@ -382,6 +751,88 @@ async function callModelWithFallback(route, messages, signal) {
   const error = new Error(`Model request failed: ${lastStatus} ${lastStatusText}`);
   error.status = lastStatus;
   throw error;
+}
+
+async function continueIfNeeded(route, originalMessages, data, signal, model) {
+  let merged = data;
+  let continuationMessages = originalMessages.slice();
+  let attempts = 0;
+
+  while (merged.stop_reason === 'max_tokens' && attempts < 2) {
+    const currentText = extractResponseText(merged);
+    continuationMessages = continuationMessages.concat([
+      { role: 'assistant', content: currentText },
+      {
+        role: 'user',
+        content: 'Continue and complete the report from exactly where you stopped. Do not restart. Include any remaining tables, actions, review/approval fields, and export notes. End only when the report is complete.'
+      }
+    ]);
+
+    const continuationRoute = {
+      ...route,
+      model,
+      enableWebSearch: false,
+      maxTokens: Math.min(route.maxTokens || 8000, 10000),
+      instruction: `${route.instruction} Continue from the prior partial answer and finish the complete report.`
+    };
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify(buildRequestBody(continuationMessages, continuationRoute))
+    });
+
+    if (!response.ok) break;
+    const nextData = await response.json();
+    merged = mergeResponses(merged, nextData);
+    attempts++;
+  }
+
+  return merged;
+}
+
+function extractResponseText(data) {
+  if (!data || !Array.isArray(data.content)) return '';
+  return data.content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text || '')
+    .join('\n\n');
+}
+
+function mergeResponses(first, second) {
+  const mergedContent = [];
+  if (Array.isArray(first.content)) mergedContent.push(...first.content);
+  if (Array.isArray(second.content)) {
+    second.content.forEach((block) => {
+      if (block.type === 'text' && block.text) {
+        mergedContent.push({
+          ...block,
+          text: '\n\n' + block.text
+        });
+      }
+    });
+  }
+
+  return {
+    ...first,
+    stop_reason: second.stop_reason,
+    stop_sequence: second.stop_sequence,
+    content: mergedContent,
+    usage: mergeUsage(first.usage, second.usage)
+  };
+}
+
+function mergeUsage(firstUsage = {}, secondUsage = {}) {
+  return {
+    input_tokens: Number(firstUsage.input_tokens || 0) + Number(secondUsage.input_tokens || 0),
+    output_tokens: Number(firstUsage.output_tokens || 0) + Number(secondUsage.output_tokens || 0),
+    cache_creation_input_tokens: Number(firstUsage.cache_creation_input_tokens || 0) + Number(secondUsage.cache_creation_input_tokens || 0),
+    cache_read_input_tokens: Number(firstUsage.cache_read_input_tokens || 0) + Number(secondUsage.cache_read_input_tokens || 0)
+  };
 }
 
 function shouldTryFallback(status, body) {
@@ -413,7 +864,54 @@ function appendCitationSummary(data) {
     });
   }
 
+  return sanitizeAssistantResponse(data);
+}
+
+function sanitizeAssistantResponse(data) {
+  if (!data || !Array.isArray(data.content)) return data;
+
+  data.content = data.content.map((block) => {
+    if (!block || block.type !== 'text' || typeof block.text !== 'string') return block;
+    return {
+      ...block,
+      text: sanitizeProtectedTerms(block.text)
+    };
+  });
+
   return data;
+}
+
+function sanitizeProtectedTerms(text) {
+  const protectedPatterns = [
+    [new RegExp('\\b' + ['T', 'a', 'p', 'R', 'o', 'o', 'T'].join('') + '\\b', 'gi'), 'proprietary RCA method'],
+    [new RegExp('\\b' + ['T', 'a', 'p', 'R', 'o', 'o', 't'].join('') + '\\b', 'gi'), 'proprietary RCA method'],
+    [new RegExp('\\b' + ['A', 'p', 'o', 'l', 'l', 'o'].join('') + '\\b', 'gi'), 'proprietary RCA method'],
+    [new RegExp('\\b' + ['I', 's', 'h', 'i', 'k', 'a', 'w', 'a'].join('') + '\\b', 'gi'), 'fishbone cause analysis'],
+    [new RegExp('\\b' + ['R', 'C', 'M', '2'].join('') + '\\b', 'gi'), 'RCM'],
+    [new RegExp('\\b' + ['S', 'A', 'E'].join('') + '\\s+' + ['J', 'A'].join('') + '\\s*1011\\b', 'gi'), 'recognized RCM guidance'],
+    [/\bJA\s*1011\b/gi, 'recognized RCM guidance'],
+    [new RegExp('\\b' + ['I', 'E', 'C'].join('') + '\\s+' + ['6', '0', '8', '1', '2'].join('') + '\\b', 'gi'), 'recognized FMEA guidance'],
+    [new RegExp('\\b' + ['I', 'S', 'O'].join('') + '\\s+' + ['1', '4', '2', '2', '4'].join('') + '\\b', 'gi'), 'recognized reliability data guidance'],
+    [new RegExp('\\b' + ['I', 'S', 'O'].join('') + '\\s+\\d+(?::\\d+)?\\b', 'gi'), 'recognized technical publication'],
+    [new RegExp('\\b' + ['I', 'E', 'C'].join('') + '\\s+\\d+(?::\\d+)?\\b', 'gi'), 'recognized technical publication'],
+    [new RegExp('\\b' + ['S', 'A', 'E'].join('') + '\\s+[A-Z0-9-]+\\b', 'gi'), 'recognized technical publication'],
+    [new RegExp('\\b' + ['N', 'F', 'P', 'A'].join('') + '\\s+\\d+\\b', 'gi'), 'recognized technical publication'],
+    [new RegExp('\\b' + ['O', 'S', 'H', 'A'].join('') + '\\b', 'gi'), 'recognized regulatory guidance'],
+    [new RegExp('\\b' + ['A', 'P', 'I'].join('') + '\\s+\\d+\\b', 'gi'), 'recognized technical publication'],
+    [new RegExp('\\b' + ['s', 't', 'a', 'n', 'd', 'a', 'r', 'd', 's'].join('') + '\\b', 'gi'), 'requirements'],
+    [new RegExp('\\b' + ['s', 't', 'a', 'n', 'd', 'a', 'r', 'd'].join('') + '\\b', 'gi'), 'recognized']
+  ];
+
+  let sanitized = text;
+  protectedPatterns.forEach(([pattern, replacement]) => {
+    sanitized = sanitized.replace(pattern, replacement);
+  });
+
+  return sanitized
+    .replace(/Cause-and-Effect\s*\/\s*fishbone cause analysis Diagram/gi, 'cause-and-effect diagram')
+    .replace(/fishbone cause analysis Diagram/gi, 'fishbone cause analysis diagram')
+    .replace(/Analysis recognized/gi, 'Analysis Guidance')
+    .replace(/recognized technical publication Zone/gi, 'accepted operating zone');
 }
 
 function blockedPromptExtractionResponse() {
@@ -437,7 +935,255 @@ function getCurrentReportDate() {
   }).format(new Date());
 }
 
-app.post('/api/chat', async (req, res) => {
+app.get('/api/auth/me', (req, res) => {
+  const user = getAuthenticatedUser(req);
+  const store = readUsersStore();
+  res.json({
+    authEnabled: AUTH_ENABLED,
+    authenticated: Boolean(user),
+    setupRequired: AUTH_ENABLED && store.users.filter((item) => item.role === 'admin' && item.status === 'active').length === 0,
+    user: user ? publicUser(user) : null
+  });
+});
+
+app.post('/api/auth/request-access', async (req, res) => {
+  const email = normalizeEmail(req.body.email);
+  if (!isValidEmail(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+
+  const store = readUsersStore();
+  let user = store.users.find((item) => item.email === email);
+  if (!user) {
+    user = {
+      email,
+      role: 'user',
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    store.users.push(user);
+    writeUsersStore(store);
+  }
+
+  const adminEmails = store.users.filter((item) => item.role === 'admin' && item.status === 'active').map((item) => item.email);
+  await Promise.all(adminEmails.map((adminEmail) => sendMail({
+    to: adminEmail,
+    subject: 'Reliabot access request',
+    text: `A user requested Reliabot access:\n\nEmail: ${email}\n\nLog in as admin to approve the account.`
+  }).catch((err) => console.error('Access-request email failed:', err.message))));
+
+  res.json({ ok: true, status: user.status });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const email = normalizeEmail(req.body.email);
+  const password = String(req.body.password || '');
+  const store = readUsersStore();
+  const user = store.users.find((item) => item.email === email);
+  if (!user || user.status !== 'active' || !user.passwordHash || !verifyPassword(password, user.passwordHash)) {
+    return res.status(401).json({ error: 'Invalid email or password.' });
+  }
+
+  user.lastLoginAt = new Date().toISOString();
+  writeUsersStore(store);
+  const token = createSession(email);
+  setSessionCookie(res, token);
+  res.json({ ok: true, user: publicUser(user) });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const token = parseCookies(req).reliabot_session;
+  if (token) sessions.delete(token);
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+app.post('/api/auth/change-password', requireAuth, (req, res) => {
+  const currentPassword = String(req.body.currentPassword || '');
+  const newPassword = String(req.body.newPassword || '');
+  if (newPassword.length < 10) return res.status(400).json({ error: 'New password must be at least 10 characters.' });
+
+  const store = readUsersStore();
+  const user = store.users.find((item) => item.email === req.authUser.email);
+  if (!user || !verifyPassword(currentPassword, user.passwordHash)) {
+    return res.status(401).json({ error: 'Current password is incorrect.' });
+  }
+  user.passwordHash = hashPassword(newPassword);
+  user.mustChangePassword = false;
+  user.passwordChangedAt = new Date().toISOString();
+  writeUsersStore(store);
+  res.json({ ok: true, user: publicUser(user) });
+});
+
+app.get('/api/auth/users', requireAdmin, (req, res) => {
+  const store = readUsersStore();
+  res.json({ users: store.users.map(publicUser) });
+});
+
+app.post('/api/auth/users/:email/approve', requireAdmin, async (req, res) => {
+  const email = normalizeEmail(req.params.email);
+  const store = readUsersStore();
+  const user = store.users.find((item) => item.email === email);
+  if (!user) return res.status(404).json({ error: 'User not found.' });
+
+  const temporaryPassword = String(req.body.password || generateTemporaryPassword());
+  user.role = user.role || 'user';
+  user.status = 'active';
+  user.passwordHash = hashPassword(temporaryPassword);
+  user.mustChangePassword = true;
+  user.approvedAt = new Date().toISOString();
+  user.approvedBy = req.authUser.email;
+  writeUsersStore(store);
+
+  const loginUrl = process.env.PUBLIC_APP_URL || `http://localhost:${PORT}`;
+  let emailed = false;
+  try {
+    emailed = await sendMail({
+      to: email,
+      subject: 'Your Reliabot account is approved',
+      text: `Your Reliabot account has been approved.\n\nLogin: ${loginUrl}\nEmail: ${email}\nTemporary password: ${temporaryPassword}\n\nPlease change this password after login.`
+    });
+  } catch (err) {
+    console.error('Approval email failed:', err.message);
+  }
+
+  res.json({ ok: true, user: publicUser(user), emailed, temporaryPassword: emailed ? undefined : temporaryPassword });
+});
+
+app.post('/api/auth/users/:email/disable', requireAdmin, (req, res) => {
+  const email = normalizeEmail(req.params.email);
+  const store = readUsersStore();
+  const user = store.users.find((item) => item.email === email);
+  if (!user) return res.status(404).json({ error: 'User not found.' });
+  if (user.email === req.authUser.email) return res.status(400).json({ error: 'You cannot disable your own account.' });
+  user.status = 'disabled';
+  user.disabledAt = new Date().toISOString();
+  user.disabledBy = req.authUser.email;
+  writeUsersStore(store);
+  res.json({ ok: true, user: publicUser(user) });
+});
+
+app.get('/api/visitor/me', (req, res) => {
+  const visitor = getVisitorFromRequest(req);
+  res.json({
+    registered: Boolean(visitor),
+    visitor: visitor ? publicVisitor(visitor) : null
+  });
+});
+
+app.post('/api/visitor/register', (req, res) => {
+  const name = sanitizeShortText(req.body.name, 120);
+  const email = normalizeEmail(req.body.email);
+  const company = sanitizeShortText(req.body.company, 140);
+  if (!name) return res.status(400).json({ error: 'Name is required.' });
+  if (!isValidEmail(email)) return res.status(400).json({ error: 'Valid email is required.' });
+  if (!company) return res.status(400).json({ error: 'Company is required.' });
+
+  const now = new Date().toISOString();
+  const store = readVisitorsStore();
+  const existingByCookie = getVisitorFromRequest(req);
+  let visitor = existingByCookie || store.visitors.find((item) => item.email === email);
+  if (visitor && visitor.status === 'disabled') {
+    return res.status(403).json({ error: 'This user has been disabled by admin.' });
+  }
+  const location = {
+    timezone: sanitizeShortText(req.body.timezone, 80),
+    locale: sanitizeShortText(req.body.locale, 40),
+    latitude: typeof req.body.latitude === 'number' ? req.body.latitude : null,
+    longitude: typeof req.body.longitude === 'number' ? req.body.longitude : null,
+    accuracy: typeof req.body.accuracy === 'number' ? req.body.accuracy : null
+  };
+  const network = {
+    ip: getClientIp(req),
+    userAgent: sanitizeShortText(req.headers['user-agent'], 300)
+  };
+
+  if (!visitor) {
+    visitor = {
+      id: crypto.randomBytes(16).toString('hex'),
+      createdAt: now
+    };
+    store.visitors.unshift(visitor);
+  }
+
+  Object.assign(visitor, {
+    name,
+    email,
+    company,
+    status: visitor.status || 'active',
+    location,
+    network,
+    lastSeenAt: now
+  });
+  writeVisitorsStore(store);
+  setVisitorCookie(res, visitor.id);
+  req.visitor = visitor;
+  logVisitorActivity(req, 'registration', 'Visitor completed welcome registration.');
+  res.json({ ok: true, visitor: publicVisitor(visitor) });
+});
+
+app.get('/api/admin/visitors', requireAdminDashboard, (req, res) => {
+  const store = readVisitorsStore();
+  const usageSummary = summarizeVisitorUsage(store);
+  res.json({
+    visitors: store.visitors.map((visitor) => publicVisitor(visitor, usageSummary[visitor.id])),
+    activities: store.activities.slice(0, 500)
+  });
+});
+
+app.post('/api/admin/visitors/:id/disable', requireAdminDashboard, (req, res) => {
+  const store = readVisitorsStore();
+  const visitor = store.visitors.find((item) => item.id === req.params.id);
+  if (!visitor) return res.status(404).json({ error: 'Visitor not found.' });
+  visitor.status = 'disabled';
+  visitor.disabledAt = new Date().toISOString();
+  visitor.disabledBy = 'admin';
+  store.activities.unshift({
+    id: crypto.randomBytes(10).toString('hex'),
+    visitorId: visitor.id,
+    email: visitor.email,
+    name: visitor.name,
+    company: visitor.company,
+    type: 'admin_disable',
+    detail: 'Visitor disabled by admin.',
+    module: '',
+    createdAt: new Date().toISOString(),
+    location: visitor.location,
+    network: visitor.network,
+    usage: null,
+    responseStatus: 'disabled'
+  });
+  writeVisitorsStore(store);
+  res.json({ ok: true, visitor: publicVisitor(visitor, summarizeVisitorUsage(store)[visitor.id]) });
+});
+
+app.post('/api/admin/visitors/:id/enable', requireAdminDashboard, (req, res) => {
+  const store = readVisitorsStore();
+  const visitor = store.visitors.find((item) => item.id === req.params.id);
+  if (!visitor) return res.status(404).json({ error: 'Visitor not found.' });
+  visitor.status = 'active';
+  visitor.enabledAt = new Date().toISOString();
+  visitor.enabledBy = 'admin';
+  delete visitor.disabledAt;
+  delete visitor.disabledBy;
+  store.activities.unshift({
+    id: crypto.randomBytes(10).toString('hex'),
+    visitorId: visitor.id,
+    email: visitor.email,
+    name: visitor.name,
+    company: visitor.company,
+    type: 'admin_enable',
+    detail: 'Visitor enabled by admin.',
+    module: '',
+    createdAt: new Date().toISOString(),
+    location: visitor.location,
+    network: visitor.network,
+    usage: null,
+    responseStatus: 'enabled'
+  });
+  writeVisitorsStore(store);
+  res.json({ ok: true, visitor: publicVisitor(visitor, summarizeVisitorUsage(store)[visitor.id]) });
+});
+
+app.post('/api/chat', requireVisitor, async (req, res) => {
   if (!ANTHROPIC_API_KEY) {
     return res.status(500).json({
       error: 'ANTHROPIC_API_KEY is not configured. Set it in your .env file.'
@@ -452,6 +1198,7 @@ app.post('/api/chat', async (req, res) => {
   }
 
   const latestUserMessage = getLatestUserMessage(messages);
+  const latestUserQuery = latestUserMessage ? sanitizeShortText(latestUserMessage.content, 2000) : '';
   if (latestUserMessage && looksLikeImplementationQuestion(latestUserMessage.content)) {
     return res.json(brandedIdentityResponse());
   }
@@ -475,8 +1222,21 @@ app.post('/api/chat', async (req, res) => {
 
   try {
     const data = await callModelWithFallback(route, messages, controller.signal);
+    if (latestUserQuery) {
+      logVisitorActivity(req, 'chat_query', latestUserQuery, {
+        usage: normalizeUsage(data.usage),
+        responseStatus: data.stop_reason || 'complete',
+        responsePreview: sanitizeShortText(extractResponseText(data), 500)
+      });
+    }
     res.json(data);
   } catch (err) {
+    if (latestUserQuery) {
+      logVisitorActivity(req, 'chat_error', latestUserQuery, {
+        responseStatus: err.name === 'AbortError' ? 'timeout_or_abort' : 'error',
+        responsePreview: sanitizeShortText(err.message, 500)
+      });
+    }
     if (err.name === 'AbortError') {
       return res.status(504).json({ error: 'Reliabot is still working on this request. Please continue with a narrower scope or retry with a full-work request.' });
     }
