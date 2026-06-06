@@ -49,6 +49,7 @@ npm start
 - The chat API is protected server-side until the welcome registration is completed.
 - The app logs visitor chat/search queries, selected module, browser locale/timezone, available browser location, IP address, and user agent.
 - Admin can review data at `http://localhost:3000/admin.html` using `ADMIN_DASHBOARD_TOKEN`.
+- On Vercel serverless deployments, local visitor storage uses `/tmp` and is not permanent. Use a database for durable production visitor/admin records.
 
 ## Architecture
 

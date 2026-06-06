@@ -29,7 +29,8 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .filter(Boolean);
 const requestCounts = new Map();
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== 'false';
-const AUTH_DATA_DIR = process.env.AUTH_DATA_DIR || path.join(__dirname, 'data');
+const DEFAULT_DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'reliabot-data') : path.join(__dirname, 'data');
+const AUTH_DATA_DIR = process.env.AUTH_DATA_DIR || DEFAULT_DATA_DIR;
 const AUTH_USERS_FILE = process.env.AUTH_USERS_FILE || path.join(AUTH_DATA_DIR, 'users.json');
 const SESSION_TTL_MS = Number(process.env.AUTH_SESSION_TTL_MS || 1000 * 60 * 60 * 12);
 const VISITORS_FILE = process.env.VISITORS_FILE || path.join(AUTH_DATA_DIR, 'visitors.json');
@@ -1261,7 +1262,11 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`APM-O powered by Reliabot running on http://localhost:${PORT}`);
-  console.log(`API Key loaded: ${ANTHROPIC_API_KEY ? 'YES' : 'NO'}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`APM-O powered by Reliabot running on http://localhost:${PORT}`);
+    console.log(`API Key loaded: ${ANTHROPIC_API_KEY ? 'YES' : 'NO'}`);
+  });
+}
+
+module.exports = app;
