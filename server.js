@@ -35,6 +35,10 @@ const AUTH_USERS_FILE = process.env.AUTH_USERS_FILE || path.join(AUTH_DATA_DIR, 
 const SESSION_TTL_MS = Number(process.env.AUTH_SESSION_TTL_MS || 1000 * 60 * 60 * 12);
 const VISITORS_FILE = process.env.VISITORS_FILE || path.join(AUTH_DATA_DIR, 'visitors.json');
 const ADMIN_DASHBOARD_TOKEN = process.env.ADMIN_DASHBOARD_TOKEN || process.env.ADMIN_PASSWORD || (process.env.NODE_ENV === 'production' ? '' : 'Sdvivs@407');
+const VISITOR_STORE_KEY = process.env.VISITOR_STORE_KEY || 'reliabot:visitor-admin-store:v1';
+const KV_REST_API_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '';
+const KV_REST_API_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
+const VISITOR_PERSISTENCE_ENABLED = Boolean(KV_REST_API_URL && KV_REST_API_TOKEN);
 const sessions = new Map();
 const visitorSessions = new Map();
 
@@ -104,9 +108,12 @@ When responding:
 - If an attached file or user request involves complex, safety-critical, environmental, production-critical, maintenance-strategy, financial, or approval-ready decisions and required context is missing, ask one concise clarification question and stop. Wait for the user's answer before preparing the final report.
 - Use web search only when the user needs current/latest information, asks to verify sources online, requests documents beyond general knowledge, or asks for citations. Prefer official publisher, regulator, OEM/public manual, and authoritative technical sources. Do not reproduce copyrighted text; summarize relevant requirements and cite source pages.
 - Do not proactively mention named technical publications, proprietary RCA methods, branded maintenance frameworks, or eponym/brand alternate names in user-facing answers. Use generic terms such as "recognized engineering guidance", "public technical guidance", "5-Whys", "fishbone cause analysis", "cause-and-effect diagram", "fault tree analysis", "FMEA", "FMECA", "RCM", "RCA", "RPN", "MTBF", and "MTTR".
-- Use the attached sample FMEA report format as the default report reference for FMEA, FMECA, RCM, and similar analyses: cover/report header, document number/revision/date, prepared/reviewed/approved fields, equipment/service/guidance metadata, rating scale table, RPN classification, main analysis worksheet, RPN summary, FMECA criticality fields where applicable, maintenance decision worksheet where relevant, task type legend, maintenance strategy summary, notes/assumptions, generated timestamp, applicable guidance, and internal-use footer.
-- FMEA/FMECA tables must include columns such as Item/Function, Functional Failure, Failure Mode, Cause, Effect, Existing Controls, Severity, Occurrence, Detection, RPN, Criticality, Recommended Action, Owner, and Target Date.
-- RCM tables must include columns such as Function, Functional Failure, Failure Mode, Failure Effect, Consequence Category, Task Type, Proposed Task, Frequency, Trade/Owner, Acceptance Criteria, and Reference Guidance.
+- Use the attached sample FMEA workbook structure as the default report reference for FMEA, FMECA, RCM, and similar analyses. Build the report as a management-ready workbook package with these sections in this order when the scope fits: Report Header, Rating Scales, RPN Classification, FMEA Worksheet, RPN Summary, FMECA Worksheet, RCM Decision Worksheet, Task Type Codes and Decision Legend, Maintenance Strategy Summary, Notes and Assumptions, Review/Approval, and Export Notes.
+- For FMEA Worksheet tables, use these columns where applicable: #, System / Subsystem, Component, Function, Functional Failure, Failure Mode, Failure Effect (Local / System / Plant), S, O, D, RPN, Risk Level, Recommended Action, Owner, and Target Date.
+- For RPN Summary tables, rank rows from highest to lowest RPN and use these columns: #, Component, Failure Mode Summary, S, O, D, RPN, Risk Level.
+- For FMECA Worksheet tables, extend the FMEA row set with criticality fields: Failure Mode Ratio, Failure Rate, Conditional Probability, Operating Time, Criticality Number, Criticality Level, and Recommended Action. If source data is missing, use clearly stated assumptions or write "TBD" instead of inventing precise values.
+- For RCM Decision Worksheet tables, use these columns where applicable: FM #, Component, Failure Mode, Failure Effect, Hidden Failure, Safety, Environmental, Operational, Consequence Category, Proposed Task, Task Type, Task Interval, P-F Interval Basis, Done By, Spares / Resources Required, and Initial Interval Justification.
+- For Maintenance Strategy Summary tables, group by task type and use these columns: Task Type, Code, Count, Components, Key Activities, Typical Interval, and Resource Requirements.
 - Keep the on-screen output tabulated and report-like. Prefer compact tables and short section notes over long narrative paragraphs.
 - At the end of FMEA/RCM reports, include a short "Export Notes" section saying the output is formatted for Excel workbook sheets and PDF report generation from the app buttons.
 - Identity and model-origin questions: respond only as Reliabot, an AI assistant trained on world-class AI technology and reliability data for asset performance management. Do not name model vendors, model families, API providers, backend services, implementation details, or hosting architecture. If asked who made you, which API you use, what model powers you, or whether you are built on another assistant, give a brief branded answer and redirect to reliability-engineering support.
@@ -340,25 +347,77 @@ function ensureVisitorsStore() {
   }
 }
 
-function readVisitorsStore() {
+function normalizeVisitorsStore(parsed) {
+  return {
+    visitors: Array.isArray(parsed && parsed.visitors) ? parsed.visitors : [],
+    activities: Array.isArray(parsed && parsed.activities) ? parsed.activities : []
+  };
+}
+
+function readVisitorsStoreFromFile() {
   ensureVisitorsStore();
   try {
-    const parsed = JSON.parse(fs.readFileSync(VISITORS_FILE, 'utf8'));
-    return {
-      visitors: Array.isArray(parsed.visitors) ? parsed.visitors : [],
-      activities: Array.isArray(parsed.activities) ? parsed.activities : []
-    };
+    return normalizeVisitorsStore(JSON.parse(fs.readFileSync(VISITORS_FILE, 'utf8')));
   } catch {
     return { visitors: [], activities: [] };
   }
 }
 
-function writeVisitorsStore(store) {
+function writeVisitorsStoreToFile(store) {
   ensureVisitorsStore();
   fs.writeFileSync(VISITORS_FILE, JSON.stringify({
     visitors: store.visitors || [],
     activities: store.activities || []
   }, null, 2));
+}
+
+async function kvCommand(command, ...args) {
+  if (!VISITOR_PERSISTENCE_ENABLED) return null;
+  const response = await fetch(`${KV_REST_API_URL.replace(/\/$/, '')}/pipeline`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${KV_REST_API_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify([[command, ...args]])
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Persistent visitor store failed: ${response.status} ${text}`.trim());
+  }
+  const data = await response.json();
+  return Array.isArray(data) && data[0] ? data[0].result : null;
+}
+
+async function readVisitorsStore() {
+  if (!VISITOR_PERSISTENCE_ENABLED) return readVisitorsStoreFromFile();
+  try {
+    const raw = await kvCommand('GET', VISITOR_STORE_KEY);
+    if (raw) return normalizeVisitorsStore(JSON.parse(raw));
+
+    const localStore = readVisitorsStoreFromFile();
+    if (localStore.visitors.length || localStore.activities.length) {
+      await writeVisitorsStore(localStore);
+    }
+    return localStore;
+  } catch (err) {
+    console.error('Visitor persistent store read failed:', err.message);
+    return readVisitorsStoreFromFile();
+  }
+}
+
+async function writeVisitorsStore(store) {
+  const normalized = normalizeVisitorsStore(store);
+  if (!VISITOR_PERSISTENCE_ENABLED) {
+    writeVisitorsStoreToFile(normalized);
+    return;
+  }
+  try {
+    await kvCommand('SET', VISITOR_STORE_KEY, JSON.stringify(normalized));
+  } catch (err) {
+    console.error('Visitor persistent store write failed:', err.message);
+    writeVisitorsStoreToFile(normalized);
+  }
 }
 
 function getClientIp(req) {
@@ -371,19 +430,23 @@ function setVisitorCookie(res, visitorId) {
   res.setHeader('Set-Cookie', `reliabot_visitor=${encodeURIComponent(visitorId)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${60 * 60 * 24 * 365}${secure}`);
 }
 
-function getVisitorFromRequest(req) {
+async function getVisitorFromRequest(req) {
   const visitorId = parseCookies(req).reliabot_visitor;
   if (!visitorId) return null;
-  const store = readVisitorsStore();
+  const store = await readVisitorsStore();
   return store.visitors.find((visitor) => visitor.id === visitorId) || null;
 }
 
-function requireVisitor(req, res, next) {
-  const visitor = getVisitorFromRequest(req);
-  if (!visitor) return res.status(403).json({ error: 'Please complete the welcome registration before using Reliabot.' });
-  if (visitor.status === 'disabled') return res.status(403).json({ error: 'This user has been disabled by admin.' });
-  req.visitor = visitor;
-  next();
+async function requireVisitor(req, res, next) {
+  try {
+    const visitor = await getVisitorFromRequest(req);
+    if (!visitor) return res.status(403).json({ error: 'Please complete the welcome registration before using Reliabot.' });
+    if (visitor.status === 'disabled') return res.status(403).json({ error: 'This user has been disabled by admin.' });
+    req.visitor = visitor;
+    next();
+  } catch (err) {
+    next(err);
+  }
 }
 
 function sanitizeShortText(value, maxLength) {
@@ -411,10 +474,10 @@ function publicVisitor(visitor, summary = {}) {
   };
 }
 
-function logVisitorActivity(req, type, detail, meta = {}) {
-  const visitor = req.visitor || getVisitorFromRequest(req);
+async function logVisitorActivity(req, type, detail, meta = {}) {
+  const visitor = req.visitor || await getVisitorFromRequest(req);
   if (!visitor) return null;
-  const store = readVisitorsStore();
+  const store = await readVisitorsStore();
   const activity = {
     id: crypto.randomBytes(10).toString('hex'),
     visitorId: visitor.id,
@@ -435,7 +498,7 @@ function logVisitorActivity(req, type, detail, meta = {}) {
   store.activities = store.activities.slice(0, 2000);
   const existing = store.visitors.find((item) => item.id === visitor.id);
   if (existing) existing.lastSeenAt = new Date().toISOString();
-  writeVisitorsStore(store);
+  await writeVisitorsStore(store);
   return activity;
 }
 
@@ -1062,127 +1125,152 @@ app.post('/api/auth/users/:email/disable', requireAdmin, (req, res) => {
   res.json({ ok: true, user: publicUser(user) });
 });
 
-app.get('/api/visitor/me', (req, res) => {
-  const visitor = getVisitorFromRequest(req);
-  res.json({
-    registered: Boolean(visitor),
-    visitor: visitor ? publicVisitor(visitor) : null
-  });
+app.get('/api/visitor/me', async (req, res, next) => {
+  try {
+    const visitor = await getVisitorFromRequest(req);
+    res.json({
+      registered: Boolean(visitor),
+      visitor: visitor ? publicVisitor(visitor) : null
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.post('/api/visitor/register', (req, res) => {
-  const name = sanitizeShortText(req.body.name, 120);
-  const email = normalizeEmail(req.body.email);
-  const company = sanitizeShortText(req.body.company, 140);
-  if (!name) return res.status(400).json({ error: 'Name is required.' });
-  if (!isValidEmail(email)) return res.status(400).json({ error: 'Valid email is required.' });
-  if (!company) return res.status(400).json({ error: 'Company is required.' });
+app.post('/api/visitor/register', async (req, res, next) => {
+  try {
+    const name = sanitizeShortText(req.body.name, 120);
+    const email = normalizeEmail(req.body.email);
+    const company = sanitizeShortText(req.body.company, 140);
+    if (!name) return res.status(400).json({ error: 'Name is required.' });
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'Valid email is required.' });
+    if (!company) return res.status(400).json({ error: 'Company is required.' });
 
-  const now = new Date().toISOString();
-  const store = readVisitorsStore();
-  const existingByCookie = getVisitorFromRequest(req);
-  let visitor = existingByCookie || store.visitors.find((item) => item.email === email);
-  if (visitor && visitor.status === 'disabled') {
-    return res.status(403).json({ error: 'This user has been disabled by admin.' });
-  }
-  const location = {
-    timezone: sanitizeShortText(req.body.timezone, 80),
-    locale: sanitizeShortText(req.body.locale, 40),
-    latitude: typeof req.body.latitude === 'number' ? req.body.latitude : null,
-    longitude: typeof req.body.longitude === 'number' ? req.body.longitude : null,
-    accuracy: typeof req.body.accuracy === 'number' ? req.body.accuracy : null
-  };
-  const network = {
-    ip: getClientIp(req),
-    userAgent: sanitizeShortText(req.headers['user-agent'], 300)
-  };
-
-  if (!visitor) {
-    visitor = {
-      id: crypto.randomBytes(16).toString('hex'),
-      createdAt: now
+    const now = new Date().toISOString();
+    const store = await readVisitorsStore();
+    const cookieVisitorId = parseCookies(req).reliabot_visitor;
+    let visitor = store.visitors.find((item) => item.id === cookieVisitorId) || store.visitors.find((item) => item.email === email);
+    if (visitor && visitor.status === 'disabled') {
+      return res.status(403).json({ error: 'This user has been disabled by admin.' });
+    }
+    const location = {
+      timezone: sanitizeShortText(req.body.timezone, 80),
+      locale: sanitizeShortText(req.body.locale, 40),
+      latitude: typeof req.body.latitude === 'number' ? req.body.latitude : null,
+      longitude: typeof req.body.longitude === 'number' ? req.body.longitude : null,
+      accuracy: typeof req.body.accuracy === 'number' ? req.body.accuracy : null
     };
-    store.visitors.unshift(visitor);
+    const network = {
+      ip: getClientIp(req),
+      userAgent: sanitizeShortText(req.headers['user-agent'], 300)
+    };
+
+    if (!visitor) {
+      visitor = {
+        id: crypto.randomBytes(16).toString('hex'),
+        createdAt: now
+      };
+      store.visitors.unshift(visitor);
+    }
+
+    Object.assign(visitor, {
+      name,
+      email,
+      company,
+      status: visitor.status || 'active',
+      location,
+      network,
+      lastSeenAt: now
+    });
+    await writeVisitorsStore(store);
+    setVisitorCookie(res, visitor.id);
+    req.visitor = visitor;
+    await logVisitorActivity(req, 'registration', 'Visitor completed welcome registration.');
+    res.json({ ok: true, visitor: publicVisitor(visitor) });
+  } catch (err) {
+    next(err);
   }
-
-  Object.assign(visitor, {
-    name,
-    email,
-    company,
-    status: visitor.status || 'active',
-    location,
-    network,
-    lastSeenAt: now
-  });
-  writeVisitorsStore(store);
-  setVisitorCookie(res, visitor.id);
-  req.visitor = visitor;
-  logVisitorActivity(req, 'registration', 'Visitor completed welcome registration.');
-  res.json({ ok: true, visitor: publicVisitor(visitor) });
 });
 
-app.get('/api/admin/visitors', requireAdminDashboard, (req, res) => {
-  const store = readVisitorsStore();
-  const usageSummary = summarizeVisitorUsage(store);
-  res.json({
-    visitors: store.visitors.map((visitor) => publicVisitor(visitor, usageSummary[visitor.id])),
-    activities: store.activities.slice(0, 500)
-  });
+app.get('/api/admin/visitors', requireAdminDashboard, async (req, res, next) => {
+  try {
+    const store = await readVisitorsStore();
+    const usageSummary = summarizeVisitorUsage(store);
+    res.json({
+      visitors: store.visitors.map((visitor) => publicVisitor(visitor, usageSummary[visitor.id])),
+      activities: store.activities.slice(0, 500),
+      persistence: {
+        mode: VISITOR_PERSISTENCE_ENABLED ? 'persistent' : 'local-file',
+        configured: VISITOR_PERSISTENCE_ENABLED
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.post('/api/admin/visitors/:id/disable', requireAdminDashboard, (req, res) => {
-  const store = readVisitorsStore();
-  const visitor = store.visitors.find((item) => item.id === req.params.id);
-  if (!visitor) return res.status(404).json({ error: 'Visitor not found.' });
-  visitor.status = 'disabled';
-  visitor.disabledAt = new Date().toISOString();
-  visitor.disabledBy = 'admin';
-  store.activities.unshift({
-    id: crypto.randomBytes(10).toString('hex'),
-    visitorId: visitor.id,
-    email: visitor.email,
-    name: visitor.name,
-    company: visitor.company,
-    type: 'admin_disable',
-    detail: 'Visitor disabled by admin.',
-    module: '',
-    createdAt: new Date().toISOString(),
-    location: visitor.location,
-    network: visitor.network,
-    usage: null,
-    responseStatus: 'disabled'
-  });
-  writeVisitorsStore(store);
-  res.json({ ok: true, visitor: publicVisitor(visitor, summarizeVisitorUsage(store)[visitor.id]) });
+app.post('/api/admin/visitors/:id/disable', requireAdminDashboard, async (req, res, next) => {
+  try {
+    const store = await readVisitorsStore();
+    const visitor = store.visitors.find((item) => item.id === req.params.id);
+    if (!visitor) return res.status(404).json({ error: 'Visitor not found.' });
+    visitor.status = 'disabled';
+    visitor.disabledAt = new Date().toISOString();
+    visitor.disabledBy = 'admin';
+    store.activities.unshift({
+      id: crypto.randomBytes(10).toString('hex'),
+      visitorId: visitor.id,
+      email: visitor.email,
+      name: visitor.name,
+      company: visitor.company,
+      type: 'admin_disable',
+      detail: 'Visitor disabled by admin.',
+      module: '',
+      createdAt: new Date().toISOString(),
+      location: visitor.location,
+      network: visitor.network,
+      usage: null,
+      responseStatus: 'disabled'
+    });
+    await writeVisitorsStore(store);
+    res.json({ ok: true, visitor: publicVisitor(visitor, summarizeVisitorUsage(store)[visitor.id]) });
+  } catch (err) {
+    next(err);
+  }
 });
 
-app.post('/api/admin/visitors/:id/enable', requireAdminDashboard, (req, res) => {
-  const store = readVisitorsStore();
-  const visitor = store.visitors.find((item) => item.id === req.params.id);
-  if (!visitor) return res.status(404).json({ error: 'Visitor not found.' });
-  visitor.status = 'active';
-  visitor.enabledAt = new Date().toISOString();
-  visitor.enabledBy = 'admin';
-  delete visitor.disabledAt;
-  delete visitor.disabledBy;
-  store.activities.unshift({
-    id: crypto.randomBytes(10).toString('hex'),
-    visitorId: visitor.id,
-    email: visitor.email,
-    name: visitor.name,
-    company: visitor.company,
-    type: 'admin_enable',
-    detail: 'Visitor enabled by admin.',
-    module: '',
-    createdAt: new Date().toISOString(),
-    location: visitor.location,
-    network: visitor.network,
-    usage: null,
-    responseStatus: 'enabled'
-  });
-  writeVisitorsStore(store);
-  res.json({ ok: true, visitor: publicVisitor(visitor, summarizeVisitorUsage(store)[visitor.id]) });
+app.post('/api/admin/visitors/:id/enable', requireAdminDashboard, async (req, res, next) => {
+  try {
+    const store = await readVisitorsStore();
+    const visitor = store.visitors.find((item) => item.id === req.params.id);
+    if (!visitor) return res.status(404).json({ error: 'Visitor not found.' });
+    visitor.status = 'active';
+    visitor.enabledAt = new Date().toISOString();
+    visitor.enabledBy = 'admin';
+    delete visitor.disabledAt;
+    delete visitor.disabledBy;
+    store.activities.unshift({
+      id: crypto.randomBytes(10).toString('hex'),
+      visitorId: visitor.id,
+      email: visitor.email,
+      name: visitor.name,
+      company: visitor.company,
+      type: 'admin_enable',
+      detail: 'Visitor enabled by admin.',
+      module: '',
+      createdAt: new Date().toISOString(),
+      location: visitor.location,
+      network: visitor.network,
+      usage: null,
+      responseStatus: 'enabled'
+    });
+    await writeVisitorsStore(store);
+    res.json({ ok: true, visitor: publicVisitor(visitor, summarizeVisitorUsage(store)[visitor.id]) });
+  } catch (err) {
+    next(err);
+  }
 });
+
 
 app.post('/api/chat', requireVisitor, async (req, res) => {
   if (!ANTHROPIC_API_KEY) {
@@ -1224,7 +1312,7 @@ app.post('/api/chat', requireVisitor, async (req, res) => {
   try {
     const data = await callModelWithFallback(route, messages, controller.signal);
     if (latestUserQuery) {
-      logVisitorActivity(req, 'chat_query', latestUserQuery, {
+      await logVisitorActivity(req, 'chat_query', latestUserQuery, {
         usage: normalizeUsage(data.usage),
         responseStatus: data.stop_reason || 'complete',
         responsePreview: sanitizeShortText(extractResponseText(data), 500)
@@ -1233,7 +1321,7 @@ app.post('/api/chat', requireVisitor, async (req, res) => {
     res.json(data);
   } catch (err) {
     if (latestUserQuery) {
-      logVisitorActivity(req, 'chat_error', latestUserQuery, {
+      await logVisitorActivity(req, 'chat_error', latestUserQuery, {
         responseStatus: err.name === 'AbortError' ? 'timeout_or_abort' : 'error',
         responsePreview: sanitizeShortText(err.message, 500)
       });

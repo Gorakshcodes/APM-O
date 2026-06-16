@@ -5,6 +5,7 @@
     var tokenInput = document.getElementById('adminToken');
     var visitorsBody = document.getElementById('visitorsBody');
     var activityBody = document.getElementById('activityBody');
+    var storageStatus = document.getElementById('adminStorageStatus');
 
     tokenInput.value = localStorage.getItem('reliabot-admin-token') || '';
     tokenForm.addEventListener('submit', function (event) {
@@ -25,10 +26,28 @@
         if (!response.ok) {
             visitorsBody.innerHTML = '<tr><td colspan="13">' + escapeHtml(data.error || 'Could not load admin data.') + '</td></tr>';
             activityBody.innerHTML = '';
+            renderStorageStatus(null);
             return;
         }
+        renderStorageStatus(data.persistence);
         renderVisitors(data.visitors || []);
         renderActivities(data.activities || []);
+    }
+
+    function renderStorageStatus(persistence) {
+        if (!storageStatus) return;
+        if (!persistence) {
+            storageStatus.textContent = 'Storage status unavailable.';
+            storageStatus.className = 'admin-storage-status is-warning';
+            return;
+        }
+        if (persistence.configured) {
+            storageStatus.textContent = 'Persistent storage active. Visitor details and activity are saved across deployments and restarts.';
+            storageStatus.className = 'admin-storage-status is-active';
+            return;
+        }
+        storageStatus.textContent = 'Local temporary storage only. On Vercel, configure KV_REST_API_URL and KV_REST_API_TOKEN to keep admin data permanently.';
+        storageStatus.className = 'admin-storage-status is-warning';
     }
 
     function renderVisitors(visitors) {

@@ -1085,6 +1085,30 @@ body.dark-mode .rca-diagram-links {
     font-size: 0.9rem;
 }
 
+.admin-storage-status {
+    display: inline-flex;
+    margin-top: 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 7px 10px;
+    background: #f8fafc;
+    color: #111827;
+    font-size: 0.82rem;
+    font-weight: 750;
+}
+
+.admin-storage-status.is-active {
+    border-color: #16a34a;
+    background: #dcfce7;
+    color: #14532d;
+}
+
+.admin-storage-status.is-warning {
+    border-color: #f59e0b;
+    background: #fef3c7;
+    color: #78350f;
+}
+
 .admin-token-form {
     display: inline-flex;
     gap: 8px;
