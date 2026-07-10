@@ -114,8 +114,7 @@
 
         welcomeAgreeCheck.checked = false;
         welcomeAgreeBtn.disabled = true;
-        welcomeGate.classList.remove('is-hidden');
-        document.body.classList.add('welcome-locked');
+        showWelcomeGate('Checking registration...');
 
         welcomeAgreeCheck.addEventListener('change', function () {
             welcomeAgreeBtn.disabled = !welcomeAgreeCheck.checked;
@@ -126,6 +125,32 @@
             if (!welcomeAgreeCheck.checked) return;
             await registerVisitor();
         });
+
+        verifyExistingVisitor();
+    }
+
+    function showWelcomeGate(statusText) {
+        welcomeGate.classList.remove('is-hidden');
+        document.body.classList.add('welcome-locked');
+        setVisitorStatus(statusText || '');
+    }
+
+    async function verifyExistingVisitor() {
+        try {
+            var response = await fetch('/api/visitor/me', {
+                credentials: 'same-origin',
+                cache: 'no-store'
+            });
+            var data = await response.json().catch(function () { return {}; });
+            if (response.ok && data.registered) {
+                enterApp();
+                return;
+            }
+        } catch (err) {
+            // If the check fails, allow normal registration instead of blocking entry.
+        }
+        setVisitorStatus('');
+        welcomeAgreeBtn.disabled = !welcomeAgreeCheck.checked;
     }
 
     async function registerVisitor() {
@@ -135,6 +160,8 @@
             var location = await getVisitorLocation();
             var response = await fetch('/api/visitor/register', {
                 method: 'POST',
+                credentials: 'same-origin',
+                cache: 'no-store',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: visitorName.value,
