@@ -29,6 +29,91 @@
         review: 'Using the Report Quality Review module. Return complete findings in a tabulated audit report format with severity, evidence, recommendation, owner, and status columns. Do not include diagrams unless the user explicitly requests them: '
     };
 
+    const MODULE_INTROS = {
+        eca: {
+            title: 'Equipment Criticality Analysis',
+            lead: 'Use this capability to rank assets by business, safety, environmental, production, and maintenance impact.',
+            use: [
+                'Share an equipment list, process area, failure history, downtime, production impact, safety/environment impact, or maintenance cost.',
+                'Ask for a quick screening, a full ECA report, or a 5x5 risk matrix.'
+            ],
+            outputs: [
+                'Criticality ranking and risk category',
+                '5x5 risk matrix scoring',
+                'High-priority asset list',
+                'Recommended actions and review notes',
+                'Excel/PDF-ready report tables'
+            ],
+            prompt: 'Try: Prepare an ECA for these assets and rank them by criticality.'
+        },
+        rcm: {
+            title: 'RCM / FMEA Analysis',
+            lead: 'Use this capability to analyze functions, failures, failure modes, effects, risk priority, and maintenance strategy.',
+            use: [
+                'Share the asset name, operating context, functions, known failure modes, downtime, inspection history, or maintenance tasks.',
+                'Ask for FMEA, FMECA, RCM task selection, or a maintenance strategy report.'
+            ],
+            outputs: [
+                'FMEA Worksheet with S/O/D and RPN',
+                'RPN Summary ranked by priority',
+                'FMECA criticality worksheet when data is available',
+                'RCM Decision Worksheet',
+                'Maintenance Strategy Summary',
+                'Excel/PDF-ready workbook-style report'
+            ],
+            prompt: 'Try: Prepare a complete FMEA and RCM maintenance strategy for this pump.'
+        },
+        rca: {
+            title: 'Root Cause Analysis',
+            lead: 'Use this capability to investigate incidents, repeated failures, abnormal events, and reliability problems.',
+            use: [
+                'Share the event description, timeline, symptoms, evidence, failed parts, alarms, operating conditions, and actions already taken.',
+                'Ask for a 5-Why analysis, fishbone cause analysis, corrective action plan, or full RCA report.'
+            ],
+            outputs: [
+                'Problem statement and evidence register',
+                'Timeline and 5-Why table',
+                'Fishbone or cause-and-effect analysis',
+                'Corrective and preventive action plan',
+                'Verification/effectiveness checks',
+                'Report-only diagrams in PDF export'
+            ],
+            prompt: 'Try: Prepare an RCA for this repeated bearing failure event.'
+        },
+        analytics: {
+            title: 'Reliability Analytics',
+            lead: 'Use this capability for reliability calculations, trend analysis, and failure data interpretation.',
+            use: [
+                'Share failure dates, operating hours, repair durations, censored/suspended data, or production uptime records.',
+                'Ask for MTBF, MTTR, availability, Weibull, survival analysis, or reliability trend calculations.'
+            ],
+            outputs: [
+                'Plain-English formulas and calculations',
+                'MTBF, MTTR, availability, and failure rate',
+                'Weibull and survival analysis summaries',
+                'Reliability trend interpretation',
+                'Excel/PDF-ready calculation tables'
+            ],
+            prompt: 'Try: Calculate MTBF, MTTR, and availability from this failure data.'
+        },
+        review: {
+            title: 'Report Quality Review',
+            lead: 'Use this capability to review reliability reports, PDFs, Excel files, and technical write-ups for quality and completeness.',
+            use: [
+                'Attach a PDF, Excel workbook, or paste report text.',
+                'Ask for formatting issues, technical gaps, missing sections, readability, or business-report improvement recommendations.'
+            ],
+            outputs: [
+                'Issue register with severity and evidence',
+                'Formatting and readability findings',
+                'Technical completeness gaps',
+                'Recommended corrections',
+                'Business-standard report improvement plan'
+            ],
+            prompt: 'Try: Review this FMEA report and list formatting, technical, and completeness issues.'
+        }
+    };
+
     // ── DOM references ─────────────────────────────────────────────────
     const chatMessages = document.getElementById('chatMessages');
     const userInput = document.getElementById('userInput');
@@ -67,7 +152,7 @@
         sendMessage();
     });
     newChatBtn.addEventListener('click', function () {
-        startNewChat();
+        startNewChat({ keepModule: true, silent: true });
     });
     initTheme();
     themeToggle.addEventListener('click', function () {
@@ -218,10 +303,6 @@
 
     // ── Module selection ───────────────────────────────────────────────
     function selectModule(module) {
-        var changedModule = currentModule !== module;
-        if (changedModule) {
-            startNewChat({ silent: true, keepModule: false });
-        }
         currentModule = module;
 
         // Update active state in sidebar
@@ -229,7 +310,7 @@
             b.classList.toggle('active', b.dataset.module === module);
         });
 
-        addSystemMessage('Started a new chat in ' + MODULE_NAMES[module] + ' mode.');
+        startNewChat({ silent: true, keepModule: true });
     }
 
     function startNewChat(options) {
@@ -250,17 +331,33 @@
         }
 
         chatMessages.innerHTML = '';
-        addWelcomeMessage();
+        addWelcomeMessage(currentModule);
 
         if (!options.silent) {
             addSystemMessage('Started a new chat.');
         }
     }
 
-    function addWelcomeMessage() {
+    function addWelcomeMessage(module) {
+        var intro = module ? MODULE_INTROS[module] : null;
         var div = document.createElement('div');
         div.className = 'chat-message flex items-start space-x-3';
-        div.innerHTML =
+        if (intro) {
+            div.innerHTML =
+                '<div class="bot-avatar">' +
+                    '<img src="/reliabot-logo.png" alt="Reliabot">' +
+                '</div>' +
+                '<div class="flex-1 message-content text-sm max-w-5xl">' +
+                    '<p><strong>' + escapeHtml(intro.title) + '</strong></p>' +
+                    '<p class="mt-3">' + escapeHtml(intro.lead) + '</p>' +
+                    '<p class="mt-3"><strong>How to use it:</strong></p>' +
+                    buildIntroList(intro.use) +
+                    '<p class="mt-3"><strong>Outputs you can get:</strong></p>' +
+                    buildIntroList(intro.outputs) +
+                    '<p class="mt-3 muted-text">' + escapeHtml(intro.prompt) + '</p>' +
+                '</div>';
+        } else {
+            div.innerHTML =
             '<div class="bot-avatar">' +
                 '<img src="/reliabot-logo.png" alt="Reliabot">' +
             '</div>' +
@@ -276,8 +373,15 @@
                 '</ul>' +
                 '<p class="mt-3 muted-text">Select a capability, attach source files, or ask for a structured FMEA, RCM, RCA, ECA, or reliability report.</p>' +
             '</div>';
+        }
         chatMessages.appendChild(div);
         scrollToBottom();
+    }
+
+    function buildIntroList(items) {
+        return '<ul class="mt-2 space-y-1 ml-4">' + items.map(function (item) {
+            return '<li>&bull; ' + escapeHtml(item) + '</li>';
+        }).join('') + '</ul>';
     }
 
     function initTheme() {
