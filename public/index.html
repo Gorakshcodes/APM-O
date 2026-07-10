@@ -18,9 +18,9 @@
         </div>
         <form id="visitorForm" class="welcome-disclaimer">
             <div>
-                <h1 id="welcomeTitle">Open APM Disclaimer</h1>
+                <h1 id="welcomeTitle">O-APM Disclaimer</h1>
                 <p id="welcomeDisclaimer">
-                    Open APM, powered by Reliabot, is an experimental reliability model for testing, learning, and exploratory guidance only. It is not for commercial, financial, safety, operational, maintenance, reliability, legal, or compliance decision-making. AI-generated responses may be inaccurate, incomplete, outdated, or not aligned with applicable requirements or site-specific conditions. Qualified human review, intervention, supervision, and independent verification are required before any real-world use. Please share true and accurate details so we can maintain proper user records, follow up on updates, and review usage responsibly.
+                    O-APM, powered by Reliabot, is an experimental reliability model for testing, learning, and exploratory guidance only. It is not for commercial, financial, safety, operational, maintenance, reliability, legal, or compliance decision-making. AI-generated responses may be inaccurate, incomplete, outdated, or not aligned with applicable requirements or site-specific conditions. Qualified human review, intervention, supervision, and independent verification are required before any real-world use. Please share true and accurate details so we can maintain proper user records, follow up on updates, and review usage responsibly.
                 </p>
             </div>
             <div class="visitor-fields">
@@ -30,7 +30,7 @@
             </div>
             <label class="welcome-consent">
                 <input id="welcomeAgreeCheck" type="checkbox">
-                <span>I understand and agree that Open APM is experimental guidance only.</span>
+                <span>I understand and agree that O-APM is experimental guidance only.</span>
             </label>
             <button id="welcomeAgreeBtn" class="welcome-agree-btn" type="submit" disabled>Submit and Enter</button>
             <div id="visitorFormStatus" class="visitor-form-status" aria-live="polite"></div>
@@ -76,6 +76,10 @@
                         <h2 class="text-sm font-medium muted-text uppercase tracking-wide">Capabilities</h2>
                     </div>
                     <div class="space-y-1" id="moduleList">
+                        <button data-module="general"
+                            class="module-btn w-full text-left px-3 py-2.5 rounded-md border border-transparent transition-all">
+                            <div class="font-medium text-sm">General</div>
+                        </button>
                         <button data-module="eca"
                             class="module-btn w-full text-left px-3 py-2.5 rounded-md border border-transparent transition-all">
                             <div class="font-medium text-sm">Equipment Criticality</div>
@@ -121,6 +125,7 @@
                                 <p>Welcome to <strong>O-APM</strong>, powered by Reliabot.</p>
                                 <p class="mt-3">I can help you with:</p>
                                 <ul class="mt-2 space-y-1 ml-4">
+                                    <li>&bull; General quick answers, formulas, and examples</li>
                                     <li>&bull; Equipment Criticality Analysis (ECA) with 5x5 risk matrix</li>
                                     <li>&bull; Reliability Centered Maintenance (RCM) task selection</li>
                                     <li>&bull; FMEA/FMECA Analysis with RPN calculations</li>
@@ -170,6 +175,6 @@
         </div>
     </div>
 
-    <script src="/app.js?v=20260710-o-apm-brand"></script>
+    <script src="/app.js?v=20260710-general-model-routing"></script>
 </body>
 </html>

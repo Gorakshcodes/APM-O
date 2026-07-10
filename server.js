@@ -17,6 +17,7 @@ const API_TIMEOUT_MS = Number(process.env.API_TIMEOUT_MS || 0);
 const FAST_MODEL = process.env.RELIABOT_FAST_MODEL || 'claude-haiku-4-5-20251001';
 const BALANCED_MODEL = process.env.RELIABOT_BALANCED_MODEL || 'claude-sonnet-4-6';
 const DEEP_MODEL = process.env.RELIABOT_DEEP_MODEL || 'claude-opus-4-7';
+const RCA_ANALYTICS_MODEL = process.env.RELIABOT_RCA_ANALYTICS_MODEL || process.env.RELIABOT_FABLE_MODEL || DEEP_MODEL;
 const FALLBACK_MODEL = process.env.RELIABOT_FALLBACK_MODEL || 'claude-sonnet-4-20250514';
 const WEB_SEARCH_TOOL_TYPE = process.env.RELIABOT_WEB_SEARCH_TOOL_TYPE || 'web_search_20250305';
 const BLOCKED_WEB_DOMAINS = (process.env.RELIABOT_BLOCKED_WEB_DOMAINS || 'mpedia.ir,dl.mpedia.ir,wikipedia.org')
@@ -90,11 +91,14 @@ When responding:
 - If creating analyses, show actual data and calculations, not just templates
 - Always produce concrete outputs that the user can use directly
 - For simple definitions, formulas, examples, greetings, and short questions, answer directly and briefly. Do not expand into a full report unless the user asks for one.
+- In General mode, prioritize quick fast answers using concise wording. If the user needs a report, tell them to explicitly ask for "report format", "full report", "PDF-ready", or "Excel-ready" output so deeper report mode can be used.
 - Write formulas in plain English or simple mathematical notation that a normal browser can display, for example "MTBF = Total Operating Time / Number of Failures". Do not use LaTeX, TeX, MathML, "$$", "\\(...\\)", "\\[...\\]", "\\frac{}", "\\text{}", or other math-renderer syntax.
 - For broad or long-running work, first offer a compact option and a full-work option when scope is unclear or likely to take significant time.
 - If the request is unclear, illogical, technically inconsistent, missing asset/process context, or not reliability-engineering sound, ask one concise clarification question before doing analysis.
+- In specialist capability modes such as ECA, RCM/FMEA, RCA, Reliability Analytics, and Report Review, use deeper analysis behavior for substantive engineering work. If the user provides too little data, ask for the missing asset/system, operating context, evidence, or desired output format before working blindly.
 - For FMEA, FMECA, and RCM requests, prepare the answer as a formal report that is ready for Excel and PDF export.
 - For report requests, deliver the complete report in one response whenever possible. Do not stop after only an executive summary or partial table. Include all required sections, core registers, action plan, assumptions, review/approval fields, and export notes before ending.
+- For long reports or analysis that may exceed one response, complete the work in clear batches/sections and continue from where you stopped rather than restarting or timing out.
 - For very large report scopes, produce a compact but complete report rather than an unfinished long report: include representative rows, clear assumptions, and an action register, then state what additional source data would be needed for expansion.
 - Use Markdown tables for all report registers so the browser can render them as on-screen tables and export them to Excel. Do not use code blocks for report tables.
 - Use professional Excel-report style sections: Report Header, Executive Summary, Asset/System Definition, Assumptions, Methodology/Guidance, Analysis Register, Recommended Maintenance Plan, Action Tracker, and Review/Approval.
@@ -682,18 +686,36 @@ function getLatestUserMessage(messages) {
   return [...messages].reverse().find((message) => message.role === 'user');
 }
 
-function classifyRequest(messages) {
+function normalizeModuleName(value) {
+  const module = String(value || 'general').toLowerCase();
+  return ['general', 'eca', 'rcm', 'rca', 'analytics', 'review'].includes(module) ? module : 'general';
+}
+
+function getCapabilityModel(module) {
+  if (module === 'rca' || module === 'analytics') return RCA_ANALYTICS_MODEL;
+  if (module === 'eca' || module === 'rcm' || module === 'review') return DEEP_MODEL;
+  return BALANCED_MODEL;
+}
+
+function classifyRequest(messages, selectedModule = 'general', routeText = '') {
+  const module = normalizeModuleName(selectedModule);
   const latestUserMessage = getLatestUserMessage(messages);
   const latestText = latestUserMessage?.content || '';
-  const normalized = latestText.toLowerCase();
+  const routingText = String(routeText || latestText || '').trim();
+  const normalized = routingText.toLowerCase();
+  const fullNormalized = latestText.toLowerCase();
   const hasAttachment = normalized.includes('attached file context:');
-  const wordCount = latestText.trim().split(/\s+/).filter(Boolean).length;
-  const wantsReport = /\b(report|fmea|fmeca|rcm|rca|root cause|criticality|eca|weibull|survival analysis|maintenance strategy|audit|review|pdf|excel|worksheet|matrix|register)\b/.test(normalized);
+  const hasAttachmentContext = hasAttachment || fullNormalized.includes('attached file context:');
+  const wordCount = routingText.split(/\s+/).filter(Boolean).length;
+  const explicitlyWantsReport = /\b(report|report format|pdf|excel|worksheet|register|formal|management|approval ready|approval-ready|downloadable)\b/.test(normalized);
+  const reliabilityAnalysis = /\b(fmea|fmeca|rcm|rca|root cause|criticality|eca|weibull|survival analysis|maintenance strategy|audit|review|matrix)\b/.test(normalized);
+  const wantsReport = explicitlyWantsReport || (module !== 'general' && reliabilityAnalysis);
   const wantsDeepWork = /\b(full|complete|comprehensive|detailed|approval|management|formal|all|end-to-end|procedure|strategy|plan)\b/.test(normalized);
   const wantsCurrentSources = /\b(latest|current|today|recent|updated|new|202[5-9]|web|online|search|source|sources|cite|citation|verify|guidance|document|documents|manual|regulation)\b/.test(normalized);
-  const isSmallSample = /\b(sample|example|formula|definition|define|what is|how to calculate|quick|brief)\b/.test(normalized) && wordCount < 80 && !hasAttachment;
-  const isSimple = !hasAttachment && !wantsDeepWork && (isSmallSample || (wordCount <= 28 && !wantsReport && !wantsCurrentSources));
-  const shouldClarify = shouldAskForScope(normalized, wordCount, hasAttachment);
+  const isSmallSample = /\b(sample|example|formula|definition|define|what is|how to calculate|quick|brief)\b/.test(normalized) && wordCount < 80 && !hasAttachmentContext;
+  const isSimple = !hasAttachmentContext && !wantsDeepWork && (isSmallSample || (wordCount <= 28 && !explicitlyWantsReport && !wantsCurrentSources));
+  const capabilityNeedsDeep = module !== 'general' && !isSimple;
+  const shouldClarify = shouldAskForScope(normalized, wordCount, hasAttachmentContext, module, explicitlyWantsReport, wantsDeepWork, reliabilityAnalysis);
 
   if (shouldClarify) {
     return {
@@ -711,28 +733,30 @@ function classifyRequest(messages) {
       model: FAST_MODEL,
       maxTokens: 900,
       enableWebSearch: false,
-      instruction: 'Use a fast concise answer. Keep it short unless the user asks for a report.'
+      instruction: 'Use a fast concise answer. Keep it short unless the user asks for a report. If the user wants a report, tell them to ask specifically for report format.'
     };
   }
 
   if (wantsCurrentSources) {
+    const sourceModel = wantsDeepWork || hasAttachmentContext || capabilityNeedsDeep || explicitlyWantsReport ? getCapabilityModel(module) : BALANCED_MODEL;
     return {
-      type: wantsDeepWork || hasAttachment ? 'deep-web' : 'balanced-web',
-      model: wantsDeepWork || hasAttachment ? DEEP_MODEL : BALANCED_MODEL,
-      maxTokens: wantsDeepWork || hasAttachment ? 14000 : 6000,
+      type: wantsDeepWork || hasAttachmentContext || capabilityNeedsDeep ? 'deep-web' : 'balanced-web',
+      model: sourceModel,
+      maxTokens: wantsDeepWork || hasAttachmentContext || capabilityNeedsDeep ? 14000 : 6000,
       enableWebSearch: true,
-      webMaxUses: wantsDeepWork || hasAttachment ? 4 : 2,
-      instruction: 'Use web search selectively for current or source-grounded information. Cite sources and keep the answer scoped to the user request.'
+      webMaxUses: wantsDeepWork || hasAttachmentContext || capabilityNeedsDeep ? 4 : 2,
+      instruction: 'Use web search selectively for current or source-grounded information. Cite sources and keep the answer scoped to the user request. If the scope is too broad or missing key data, ask one concise clarification question before doing deep analysis.'
     };
   }
 
-  if (wantsReport || wantsDeepWork || hasAttachment) {
+  if (wantsReport || wantsDeepWork || hasAttachmentContext || capabilityNeedsDeep) {
+    const analysisModel = getCapabilityModel(module);
     return {
       type: 'deep',
-      model: wantsDeepWork || hasAttachment ? DEEP_MODEL : BALANCED_MODEL,
-      maxTokens: wantsDeepWork || hasAttachment ? 14000 : 10000,
+      model: analysisModel,
+      maxTokens: 14000,
       enableWebSearch: false,
-      instruction: 'Do the requested reliability engineering work and complete the report. Include all core sections, tables, assumptions, action items, review/approval fields, and export notes. If the scope is too broad, ask a concise clarification question instead of guessing.'
+      instruction: 'Do the requested reliability engineering work with deep/report mode. If the user explicitly asks for report format, complete the report with core sections, tables, assumptions, action items, review/approval fields, and export notes. If the scope is broad, illogical, or missing key data, ask one concise clarification question before analysis instead of guessing. If output is long, complete it in clear batches or continue sections rather than timing out.'
     };
   }
 
@@ -745,7 +769,7 @@ function classifyRequest(messages) {
   };
 }
 
-function shouldAskForScope(normalized, wordCount, hasAttachment) {
+function shouldAskForScope(normalized, wordCount, hasAttachment, module, explicitlyWantsReport, wantsDeepWork, reliabilityAnalysis) {
   if (hasAttachment) return false;
 
   const bareReportRequest = /\b(make|create|prepare|generate|do)\b.*\b(report|fmea|fmeca|rcm|rca|criticality|eca)\b/.test(normalized) && wordCount < 16;
@@ -753,8 +777,10 @@ function shouldAskForScope(normalized, wordCount, hasAttachment) {
   const impossibleCertainty = /\b(guarantee|prove exactly|zero risk|100% safe|no failure ever|perfect maintenance)\b/.test(normalized);
   const missingCriticalContext = /\b(safety critical|approval ready|final recommendation|shutdown|trip|explosion|fire|fatality|environmental)\b/.test(normalized) &&
     !/\b(asset|equipment|failure|site|operating|history|evidence|data|guidance)\b/.test(normalized);
+  const thinCapabilityReport = module !== 'general' && (explicitlyWantsReport || wantsDeepWork || reliabilityAnalysis) && wordCount > 0 && wordCount < 8 &&
+    !/\b(sample|example|formula|definition|define|what is|quick|brief)\b/.test(normalized);
 
-  return bareReportRequest || vagueSystemRequest || impossibleCertainty || missingCriticalContext;
+  return bareReportRequest || vagueSystemRequest || impossibleCertainty || missingCriticalContext || thinCapabilityReport;
 }
 
 function scopeClarificationResponse() {
@@ -764,7 +790,7 @@ function scopeClarificationResponse() {
     role: 'assistant',
     content: [{
       type: 'text',
-      text: 'Please clarify the scope before I prepare the analysis: what asset/system, failure scenario, operating context, and output depth do you want? For a faster response, ask for a quick sample; for full work, provide asset data and say “full report”.'
+      text: 'Please clarify the scope before I prepare the analysis: what asset/system, failure scenario, operating context, and output depth do you want? For a faster response, ask for a quick sample; for full work, provide asset data and say “full report” or “report format”.'
     }]
   };
 }
@@ -1300,6 +1326,8 @@ app.post('/api/chat', requireVisitor, async (req, res) => {
   }
 
   const { messages } = req.body;
+  const selectedModule = normalizeModuleName(req.body.module);
+  const routeText = sanitizeShortText(req.body.routeText, MAX_MESSAGE_CHARS);
   const validationError = validateMessages(messages);
 
   if (validationError) {
@@ -1316,7 +1344,7 @@ app.post('/api/chat', requireVisitor, async (req, res) => {
     return res.json(blockedPromptExtractionResponse());
   }
 
-  const route = classifyRequest(messages);
+  const route = classifyRequest(messages, selectedModule, routeText);
   if (route.type === 'clarify') {
     return res.json(scopeClarificationResponse());
   }

@@ -14,6 +14,7 @@
     let longResponseTimers = [];
 
     const MODULE_NAMES = {
+        general: 'General',
         eca: 'Equipment Criticality Analysis',
         rcm: 'RCM/FMEA Analysis',
         rca: 'Root Cause Analysis',
@@ -22,6 +23,7 @@
     };
 
     const MODULE_CONTEXT = {
+        general: 'Using the General module. Answer quick everyday reliability questions fast and directly using concise wording. Do not produce report format unless the user specifically asks for report format, PDF, Excel, or a full report. If the user asks for report format, prepare a structured report-ready output: ',
         eca: 'Using the Equipment Criticality Analysis module. Return a complete tabulated, report-ready output with Markdown tables suitable for Excel and PDF export. Do not include diagrams unless the user explicitly requests them. Complete all core sections before ending: ',
         rcm: 'Using the RCM/FMEA Analysis module. Prepare a complete formal Excel-style and PDF-ready report using the sample FMEA workbook package structure when the scope fits: Report Header, Rating Scales, RPN Classification, FMEA Worksheet, RPN Summary, FMECA Worksheet, RCM Decision Worksheet, Task Type Codes and Decision Legend, Maintenance Strategy Summary, Notes and Assumptions, Review/Approval, and Export Notes. Use clean Markdown tables so Excel export creates clear workbook sheets. Do not include diagrams unless the user explicitly requests them. Avoid naming protected technical publications, proprietary methods, or branded frameworks unless the user explicitly provides the name and asks for source-specific context. Complete the report before ending: ',
         rca: 'Using the Root Cause Analysis module. Prepare a complete polished business-style RCA report with report header, current date, incident summary, evidence table, timeline, 5-Why analysis table, and mandatory RCA-only Figma/FigJam-ready visual diagrams for the downloadable report export, such as 5-Why flow, fishbone cause-category diagram, fault-tree blocks, or action-flow visuals. Diagrams must use high-contrast text, clear section headers, solid connectors, rounded labeled boxes, and business-report styling. Do not use low-contrast text, dotted diagrams, ASCII art, text-only tree drawings, ordinary code-block diagrams, proprietary method names, or named technical publications. Include each diagram in this exact wrapper so the app can place it in the report export: [RCA_DIAGRAM: Diagram Title], then Mermaid graph LR syntax with quoted node labels, then [/RCA_DIAGRAM]. Do not expand large diagrams in the chat body. Add an end note saying RCA visual diagrams are included in the downloadable report export and are not expanded in the chat window. Include root cause statement, corrective and preventive action plan, verification plan, owners, due dates, review/approval section, and export notes. Complete the report before ending. Use Markdown tables for screen display and export: ',
@@ -30,6 +32,22 @@
     };
 
     const MODULE_INTROS = {
+        general: {
+            title: 'General',
+            lead: 'Use this capability for quick, fast answers to general reliability questions, short explanations, formulas, examples, and simple checks.',
+            use: [
+                'Ask direct questions such as definitions, quick calculations, formula meaning, or short reliability guidance.',
+                'For a formal report, specifically say “prepare in report format”, “full report”, “PDF-ready”, or “Excel-ready”.'
+            ],
+            outputs: [
+                'Fast concise answers',
+                'Plain-English formulas',
+                'Short examples and sample wording',
+                'Quick checks before deeper analysis',
+                'Report-ready output only when explicitly requested'
+            ],
+            prompt: 'Try: Explain MTBF in simple words, or prepare this answer in report format.'
+        },
         eca: {
             title: 'Equipment Criticality Analysis',
             lead: 'Use this capability to rank assets by business, safety, environmental, production, and maintenance impact.',
@@ -365,6 +383,7 @@
                 '<p>Welcome to <strong>O-APM</strong>, powered by Reliabot.</p>' +
                 '<p class="mt-3">I can help you with:</p>' +
                 '<ul class="mt-2 space-y-1 ml-4">' +
+                    '<li>&bull; General quick answers, formulas, and examples</li>' +
                     '<li>&bull; Equipment Criticality Analysis (ECA) with 5x5 risk matrix</li>' +
                     '<li>&bull; Reliability Centered Maintenance (RCM) task selection</li>' +
                     '<li>&bull; FMEA/FMECA Analysis with RPN calculations</li>' +
@@ -444,7 +463,7 @@
         startLongResponseNotices();
 
         try {
-            const data = await callAPI(requestController.signal);
+            const data = await callAPI(requestController.signal, message);
             clearLongResponseNotices();
             removeTypingIndicator();
 
@@ -500,11 +519,15 @@
     }
 
     // ── API call (goes through our server proxy) ───────────────────────
-    async function callAPI(signal) {
+    async function callAPI(signal, routeText) {
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: conversationHistory, module: currentModule || 'general' }),
+            body: JSON.stringify({
+                messages: conversationHistory,
+                module: currentModule || 'general',
+                routeText: routeText || ''
+            }),
             signal: signal
         });
 
@@ -763,12 +786,12 @@
         clearLongResponseNotices();
         longResponseTimers.push(setTimeout(function () {
             if (isGenerating) {
-                addSystemMessage('This request is taking longer because Reliabot may be doing deeper analysis. You can wait for the full work, or stop and ask for a quick sample or narrower scope.');
+                addSystemMessage('This request is taking longer because Reliabot may be doing deeper analysis. You can wait for the full work, or stop and ask for a quick sample, a narrower scope, or report output in smaller batches.');
             }
         }, 14000));
         longResponseTimers.push(setTimeout(function () {
             if (isGenerating) {
-                addSystemMessage('Still working. For complex reports, source checks, or document review, Reliabot can continue longer. Stop only if you want to reduce the scope.');
+                addSystemMessage('Still working. For complex reports, source checks, or document review, Reliabot can continue longer and may finish in sections. Stop only if you want to reduce the scope.');
             }
         }, 45000));
     }
