@@ -362,7 +362,7 @@
                 '<img src="/reliabot-logo.png" alt="Reliabot">' +
             '</div>' +
             '<div class="flex-1 message-content text-sm max-w-5xl">' +
-                '<p>Welcome to <strong>APM-O</strong>, powered by Reliabot.</p>' +
+                '<p>Welcome to <strong>O-APM</strong>, powered by Reliabot.</p>' +
                 '<p class="mt-3">I can help you with:</p>' +
                 '<ul class="mt-2 space-y-1 ml-4">' +
                     '<li>&bull; Equipment Criticality Analysis (ECA) with 5x5 risk matrix</li>' +
@@ -385,7 +385,7 @@
     }
 
     function initTheme() {
-        var saved = localStorage.getItem('apmo-theme');
+        var saved = localStorage.getItem('oapm-theme');
         var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
         setTheme(saved || (prefersDark ? 'dark' : 'light'));
     }
@@ -393,7 +393,7 @@
     function setTheme(theme) {
         var dark = theme === 'dark';
         document.body.classList.toggle('dark-mode', dark);
-        localStorage.setItem('apmo-theme', dark ? 'dark' : 'light');
+        localStorage.setItem('oapm-theme', dark ? 'dark' : 'light');
         if (themeToggle) {
             themeToggle.setAttribute('aria-pressed', String(dark));
             themeToggle.setAttribute('title', dark ? 'Switch to light mode' : 'Switch to dark mode');
@@ -1080,18 +1080,18 @@
             Title: title,
             Subject: 'Reliability engineering report',
             Author: 'Reliabot',
-            Company: 'APM-O',
+            Company: 'O-APM',
             CreatedDate: new Date()
         };
 
         var coverData = [
-            ['APM-O BUSINESS REPORT'],
+            ['O-APM BUSINESS REPORT'],
             [],
             ['Report Title', title],
             ['Generated Date', generatedAt.displayDate],
             ['Generated Time', generatedAt.displayTime],
             ['Prepared By', 'Reliabot'],
-            ['Portal', 'APM-O'],
+            ['Portal', 'O-APM'],
             ['Export Format', 'Business Excel workbook'],
             ['Review Status', 'For qualified engineering review'],
             [],
@@ -1158,7 +1158,7 @@
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
         });
 
-        XLSX.writeFile(wb, sanitizeFileName(title || 'APM-O_Report') + '_' + generatedAt.fileDate + '.xlsx');
+        XLSX.writeFile(wb, sanitizeFileName(title || 'O-APM_Report') + '_' + generatedAt.fileDate + '.xlsx');
     }
 
     function applyWorksheetStyleHints(ws, rowCount, colCount, headerRowIndex) {
@@ -1282,7 +1282,7 @@
             var pdfOrientation = hasWideReportTable(el) ? 'landscape' : 'portrait';
             var pdf = new jsPDF({ orientation: pdfOrientation, unit: 'mm', format: 'a4' });
             renderBusinessPdf(pdf, el, title, generatedAt);
-            pdf.save(sanitizeFileName(title || 'APM-O_Report') + '_' + generatedAt.fileDate + '.pdf');
+            pdf.save(sanitizeFileName(title || 'O-APM_Report') + '_' + generatedAt.fileDate + '.pdf');
             return;
 
             var cloned = el.cloneNode(true);
@@ -1305,7 +1305,7 @@
             hdr.innerHTML =
                 '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">' +
                     '<div>' +
-                        '<div style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#0f766e;">APM-O</div>' +
+                        '<div style="font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#0f766e;">O-APM</div>' +
                         '<h1 style="font-size:27px;font-weight:800;color:#111827;margin:7px 0 0;line-height:1.18;">' + escapeHtml(title) + '</h1>' +
                         '<div style="font-size:12px;color:#111827;margin-top:7px;font-weight:700;">Powered by Reliabot</div>' +
                     '</div>' +
@@ -1356,7 +1356,7 @@
             ftr.style.color = '#111827';
             ftr.style.textAlign = 'center';
             ftr.innerHTML =
-                'This report was generated from APM-O, powered by Reliabot.<br>' +
+                'This report was generated from O-APM, powered by Reliabot.<br>' +
                 'Analysis follows recognized reliability engineering guidance and should be verified by qualified personnel before real-world use.';
             container.appendChild(ftr);
 
@@ -1390,7 +1390,7 @@
                 heightLeft -= pageHeight;
             }
 
-            pdf.save(sanitizeFileName(title || 'APM-O_Report') + '_' + generatedAt.fileDate + '.pdf');
+            pdf.save(sanitizeFileName(title || 'O-APM_Report') + '_' + generatedAt.fileDate + '.pdf');
         } catch (err) {
             console.error('PDF generation error:', err);
             alert('Error generating PDF. Please try again.');
@@ -1444,7 +1444,7 @@
         pdf.setTextColor(255, 255, 255);
         pdf.setFont('helvetica', 'bold');
         pdf.setFontSize(10);
-        pdf.text('APM-O BUSINESS REPORT', page.marginX, 10);
+        pdf.text('O-APM BUSINESS REPORT', page.marginX, 10);
         pdf.setFontSize(16);
         pdf.text(pdf.splitTextToSize(title || 'Reliability Engineering Report', 138), page.marginX, 20);
         pdf.setFont('helvetica', 'normal');
@@ -1732,7 +1732,7 @@
             pdf.setFont('helvetica', 'normal');
             pdf.setFontSize(7.5);
             pdf.setTextColor(15, 23, 42);
-            pdf.text('Generated from APM-O, powered by Reliabot. Verify before real-world use.', page.marginX, page.height - 8);
+            pdf.text('Generated from O-APM, powered by Reliabot. Verify before real-world use.', page.marginX, page.height - 8);
             pdf.text('Page ' + i + ' of ' + total, page.width - page.marginX, page.height - 8, { align: 'right' });
         }
     }

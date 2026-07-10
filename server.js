@@ -73,7 +73,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-const SYSTEM_PROMPT = `You are Reliabot operating inside APM-O, an asset performance management and reliability engineering portal. You have access to a comprehensive reliability-engineering skill that covers:
+const SYSTEM_PROMPT = `You are Reliabot operating inside O-APM, an asset performance management and reliability engineering portal. You have access to a comprehensive reliability-engineering skill that covers:
 
 1. Equipment Criticality Analysis (ECA) - 5x5 risk matrix approach with weighted consequence categories
 2. Reliability Centered Maintenance (RCM) - Maintenance decision logic and task selection
@@ -1362,7 +1362,7 @@ app.post('/api/chat', requireVisitor, async (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     ok: true,
-    service: 'APM-O powered by Reliabot'
+    service: 'O-APM powered by Reliabot'
   });
 });
 
@@ -1372,7 +1372,7 @@ app.get('*', (req, res) => {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`APM-O powered by Reliabot running on http://localhost:${PORT}`);
+    console.log(`O-APM powered by Reliabot running on http://localhost:${PORT}`);
     console.log(`API Key loaded: ${ANTHROPIC_API_KEY ? 'YES' : 'NO'}`);
   });
 }

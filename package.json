@@ -1,7 +1,7 @@
 {
   "name": "relia-bot",
   "version": "1.0.0",
-  "description": "APM-O asset performance management portal powered by Reliabot",
+  "description": "O-APM asset performance management portal powered by Reliabot",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
