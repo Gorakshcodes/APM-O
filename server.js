@@ -23,10 +23,18 @@ const BLOCKED_WEB_DOMAINS = (process.env.RELIABOT_BLOCKED_WEB_DOMAINS || 'mpedia
   .split(',')
   .map((domain) => domain.trim())
   .filter(Boolean);
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://o-apm.com',
+  'https://www.o-apm.com',
+  'https://openapm.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+const ALLOWED_ORIGINS = Array.from(new Set((process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
-  .filter(Boolean);
+  .filter(Boolean)
+  .concat(DEFAULT_ALLOWED_ORIGINS)));
 const requestCounts = new Map();
 const AUTH_ENABLED = process.env.AUTH_ENABLED !== 'false';
 const DEFAULT_DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'reliabot-data') : path.join(__dirname, 'data');
@@ -49,7 +57,11 @@ app.use(cors({
     if (!origin) return callback(null, true);
     if (isAllowedOrigin(origin)) return callback(null, true);
     return callback(new Error('Origin not allowed'));
-  }
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-token'],
+  credentials: true,
+  optionsSuccessStatus: 204
 }));
 app.use(express.json({ limit: '1mb' }));
 app.use('/api/', rateLimitRequests);
@@ -1135,6 +1147,14 @@ app.get('/api/visitor/me', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+app.get('/api/visitor/register', (req, res) => {
+  res.json({
+    ok: true,
+    method: 'POST required for visitor registration',
+    origin: req.headers.origin || ''
+  });
 });
 
 app.post('/api/visitor/register', async (req, res, next) => {
