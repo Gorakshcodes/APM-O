@@ -123,6 +123,9 @@ When responding:
   [/RCA_DIAGRAM]
 - RCA reports must include either a 5-Why analysis diagram or a fishbone cause diagram/matrix in the downloadable report export. Include both when the issue is complex or when enough evidence is provided. Do not expand large diagrams in the chat body; keep diagrams inside the report-export diagram wrapper and add an end note saying: "RCA visual diagrams are included in the downloadable report export and are not expanded in the chat window."
 - For non-RCA reports, do not add diagrams unless the user explicitly asks. Use management-ready tables, registers, summaries, and action trackers instead.
+- For Equipment Criticality Analysis reports, use numbered section headers and this order: 1. Report Header, 2. Executive Summary, 3. Asset Definition, 4. Criticality Methodology, 5. Consequence Scoring, 6. Failure Mode Risk Assessment, 7. Frequency Assignment, 8. 5x5 Criticality Matrix, 9. Risk Scoring Results, 10. Overall Criticality Classification, 11. Recommended Maintenance Strategy, 12. Action Register, 13. Assumptions and Limitations, 14. Review/Approval, 15. Export Notes.
+- ECA risk matrix formatting: render the 5x5 matrix as a complete Markdown table with headers "Severity / Frequency", "A Very Frequent", "B Frequent", "C Moderate", "D Infrequent", and "E Very Rare". Include all severity rows 5 to 1. Do not split or repeat matrix rows. Keep risk labels short: Critical, High, Medium, Low, Very Low.
+- ECA report tables must be complete before ending. Never leave a row half-written such as "| Bearing Failure | Bearing temperature monitoring | Predictive". If the answer cannot finish due to length, end with a clear note asking the user to reply "Continue" for the remaining sections.
 - Use current dates from the active system date. Do not copy historical dates from examples, samples, or uploaded report templates unless the user explicitly asks to preserve those dates.
 - When the user attaches files, treat the extracted attachment content as source material. Read it before answering, cite the file names used, and base the report on the attached data where relevant.
 - If an attached file or user request involves complex, safety-critical, environmental, production-critical, maintenance-strategy, financial, or approval-ready decisions and required context is missing, ask one concise clarification question and stop. Wait for the user's answer before preparing the final report.
@@ -898,6 +901,10 @@ async function continueIfNeeded(route, originalMessages, data, signal, model) {
     attempts++;
   }
 
+  if (merged.stop_reason === 'max_tokens') {
+    merged = appendContinuationPrompt(merged);
+  }
+
   return merged;
 }
 
@@ -930,6 +937,15 @@ function mergeResponses(first, second) {
     content: mergedContent,
     usage: mergeUsage(first.usage, second.usage)
   };
+}
+
+function appendContinuationPrompt(data) {
+  if (!data || !Array.isArray(data.content)) return data;
+  data.content.push({
+    type: 'text',
+    text: '\n\nNote: This output reached the response limit before all remaining sections could be completed. Reply "Continue" and I will continue from the next section without restarting.'
+  });
+  return data;
 }
 
 function mergeUsage(firstUsage = {}, secondUsage = {}) {

@@ -1554,6 +1554,13 @@
                 return cleanPdfText(cell.textContent);
             }) : [];
         }
+        rows = rows.map(function (row) {
+            var normalized = row.slice(0, headers.length);
+            while (normalized.length < headers.length) normalized.push('');
+            return normalized;
+        }).filter(function (row) {
+            return row.some(function (cell) { return String(cell || '').trim(); });
+        });
         return { type: 'table', headers: headers, rows: rows };
     }
 
@@ -1607,9 +1614,9 @@
         var colCount = Math.max(table.headers.length, 1);
         var colWidths = calculatePdfColumnWidths(table, usableWidth);
         var compactTable = colCount > 8;
-        var headerHeight = compactTable ? 11 : 10;
-        var bodyFontSize = compactTable ? 6.6 : 7.4;
-        var bodyLineHeight = compactTable ? 3.35 : 4;
+        var headerHeight = compactTable ? 12.5 : 11;
+        var bodyFontSize = compactTable ? 7.2 : 8.2;
+        var bodyLineHeight = compactTable ? 3.8 : 4.35;
         y = ensurePdfSpace(pdf, page, y, headerHeight + 12);
         drawPdfTableHeader(pdf, page, table.headers, y, colWidths, headerHeight);
         y += headerHeight;
@@ -1626,18 +1633,26 @@
                 drawPdfTableHeader(pdf, page, table.headers, y, colWidths, headerHeight);
                 y += headerHeight;
             }
-            pdf.setDrawColor(203, 213, 225);
-            if (rowIndex % 2 === 0) {
-                pdf.setFillColor(255, 255, 255);
-            } else {
-                pdf.setFillColor(248, 250, 252);
-            }
             pdf.setFont('helvetica', 'normal');
             pdf.setFontSize(bodyFontSize);
-            pdf.setTextColor(15, 23, 42);
             var x = page.marginX;
             table.headers.forEach(function (_, index) {
                 var colWidth = colWidths[index];
+                var riskStyle = getRiskCellStyle(row[index]);
+                if (riskStyle) {
+                    pdf.setFillColor(riskStyle.fill[0], riskStyle.fill[1], riskStyle.fill[2]);
+                    pdf.setTextColor(riskStyle.text[0], riskStyle.text[1], riskStyle.text[2]);
+                    pdf.setFont('helvetica', 'bold');
+                } else {
+                    pdf.setTextColor(15, 23, 42);
+                    pdf.setFont('helvetica', 'normal');
+                    if (rowIndex % 2 === 0) {
+                        pdf.setFillColor(255, 255, 255);
+                    } else {
+                        pdf.setFillColor(248, 250, 252);
+                    }
+                }
+                pdf.setDrawColor(148, 163, 184);
                 pdf.rect(x, y, colWidth, rowHeight, 'FD');
                 pdf.text(cellLines[index], x + 1.7, y + 4.4);
                 x += colWidth;
@@ -1731,7 +1746,7 @@
         pdf.setFillColor(15, 23, 42);
         pdf.setDrawColor(15, 23, 42);
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(headers.length > 8 ? 6.8 : 7.6);
+        pdf.setFontSize(headers.length > 8 ? 7.2 : 8.2);
         pdf.setTextColor(255, 255, 255);
         var x = page.marginX;
         headers.forEach(function (header, index) {
@@ -1740,6 +1755,17 @@
             pdf.text(pdf.splitTextToSize(header, colWidth - 3.4), x + 1.7, y + 4.5);
             x += colWidth;
         });
+    }
+
+    function getRiskCellStyle(value) {
+        var normalized = String(value || '').trim().toUpperCase();
+        if (!normalized) return null;
+        if (normalized === 'CRITICAL') return { fill: [153, 27, 27], text: [255, 255, 255] };
+        if (normalized === 'HIGH') return { fill: [220, 38, 38], text: [255, 255, 255] };
+        if (normalized === 'MEDIUM') return { fill: [254, 243, 199], text: [120, 53, 15] };
+        if (normalized === 'LOW') return { fill: [220, 252, 231], text: [20, 83, 45] };
+        if (normalized === 'VERY LOW') return { fill: [219, 234, 254], text: [30, 64, 175] };
+        return null;
     }
 
     function ensurePdfSpace(pdf, page, y, needed) {
@@ -1825,6 +1851,24 @@
             node.style.border = '0';
             node.style.background = '#ffffff';
             node.style.overflow = 'visible';
+        });
+
+        container.querySelectorAll('table').forEach(function (table) {
+            table.style.background = '#ffffff';
+            table.style.color = '#111827';
+        });
+        container.querySelectorAll('tbody tr').forEach(function (row, index) {
+            row.style.background = index % 2 === 0 ? '#ffffff' : '#f8fafc';
+        });
+        container.querySelectorAll('td').forEach(function (cell) {
+            cell.style.background = '#ffffff';
+            cell.style.color = '#111827';
+            cell.style.borderColor = '#94a3b8';
+        });
+        container.querySelectorAll('th').forEach(function (cell) {
+            cell.style.background = '#0f172a';
+            cell.style.color = '#ffffff';
+            cell.style.borderColor = '#0f172a';
         });
     }
 })();
