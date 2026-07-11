@@ -22,15 +22,15 @@
         review: 'Report Quality Review'
     };
 
-    const TABLE_FORMAT_RULE = 'Format output cleanly and professionally. For Markdown tables, put a blank line before and after each table, keep each header on one line, do not split parenthetical headers across lines, use short headers such as "Frequency (12 months)", and ensure every row has the same number of columns. If a table is too wide, split it into smaller tables or move long explanation into notes below the table. ';
+    const TABLE_FORMAT_RULE = 'Format output cleanly and professionally for both the chatbox and downloadable report. The chatbox response must be readable, management-presentable, easy to scan, and free of broken formatting; the exported PDF/Excel report must be polished, complete, consistently structured, and suitable for reliability, maintenance, operations, and management review. Work in complete methodology steps only; never send a partial step, half table, half matrix, or unfinished register. Before broad specialist analysis, show the capability methodology and ask the user to choose compact scope, selected steps, or full workflow when scope is unclear. If the next step is too large, stop after the last complete step and ask the user to reply Continue for the next step. Use clear section titles, compact metadata, concise business wording, aligned tables, consistent column names, complete action/register rows, assumptions where data is missing, and review/approval fields for report outputs. Before sending, verify that headings are coherent, tables render as tables, matrices contain all points inside the matrix/table, and no rows or bullets are stranded outside their intended section. For Markdown tables, put a blank line before and after each table, include a separator row such as "|---|---|", keep each header on one line, do not output tab-separated plain text tables, do not split parenthetical headers across lines, use short headers such as "Frequency (12 months)", ensure every row has the same number of columns, and never split trailing cells onto a new line. If a table is too wide, split it into smaller tables or move long explanation into notes below the table. ';
 
     const MODULE_CONTEXT = {
         general: TABLE_FORMAT_RULE + 'Using the General module. Answer quick everyday reliability questions fast and directly using concise wording. Do not produce report format unless the user specifically asks for report format, PDF, Excel, or a full report. If the user asks for report format, prepare a structured report-ready output: ',
-        eca: TABLE_FORMAT_RULE + 'Using the Equipment Criticality Analysis module. Return a complete tabulated, report-ready output with Markdown tables suitable for Excel and PDF export. Do not include diagrams unless the user explicitly requests them. Complete all core sections before ending: ',
-        rcm: TABLE_FORMAT_RULE + 'Using the RCM/FMEA Analysis module. Prepare a complete formal Excel-style and PDF-ready report using the sample FMEA workbook package structure when the scope fits: Report Header, Rating Scales, RPN Classification, FMEA Worksheet, RPN Summary, FMECA Worksheet, RCM Decision Worksheet, Task Type Codes and Decision Legend, Maintenance Strategy Summary, Notes and Assumptions, Review/Approval, and Export Notes. Use clean Markdown tables so Excel export creates clear workbook sheets. Do not include diagrams unless the user explicitly requests them. Avoid naming protected technical publications, proprietary methods, or branded frameworks unless the user explicitly provides the name and asks for source-specific context. Complete the report before ending: ',
-        rca: TABLE_FORMAT_RULE + 'Using the Root Cause Analysis module. Prepare a complete polished business-style RCA report with report header, current date, incident summary, evidence table, timeline, 5-Why analysis table, and mandatory RCA-only Figma/FigJam-ready visual diagrams for the downloadable report export, such as 5-Why flow, fishbone cause-category diagram, fault-tree blocks, or action-flow visuals. Diagrams must use high-contrast text, clear section headers, solid connectors, rounded labeled boxes, and business-report styling. Do not use low-contrast text, dotted diagrams, ASCII art, text-only tree drawings, ordinary code-block diagrams, proprietary method names, or named technical publications. Include each diagram in this exact wrapper so the app can place it in the report export: [RCA_DIAGRAM: Diagram Title], then Mermaid graph LR syntax with quoted node labels, then [/RCA_DIAGRAM]. Do not expand large diagrams in the chat body. Add an end note saying RCA visual diagrams are included in the downloadable report export and are not expanded in the chat window. Include root cause statement, corrective and preventive action plan, verification plan, owners, due dates, review/approval section, and export notes. Complete the report before ending. Use Markdown tables for screen display and export: ',
-        analytics: TABLE_FORMAT_RULE + 'Using the Reliability Analytics module. Return complete calculations and results in tabulated report format suitable for Excel and PDF export. Do not include diagrams unless the user explicitly requests them: ',
-        review: TABLE_FORMAT_RULE + 'Using the Report Quality Review module. Return complete findings in a tabulated audit report format with severity, evidence, recommendation, owner, and status columns. Do not include diagrams unless the user explicitly requests them: '
+        eca: TABLE_FORMAT_RULE + 'Using the Equipment Criticality Analysis module. Use these steps: 1. Asset Definition, 2. Consequence Scoring, 3. Failure Mode Risk Assessment, 4. Frequency Assignment, 5. 5x5 Criticality Matrix, 6. Maintenance Strategy Selection. Return complete tabulated, report-ready output with Markdown tables suitable for Excel and PDF export. Do not include diagrams unless the user explicitly requests them. Complete each step before ending or moving on: ',
+        rcm: TABLE_FORMAT_RULE + 'Using the RCM/FMEA Analysis module. Use these steps: 1. System and Function Definition, 2. Functional Failure Identification, 3. Failure Mode and Effects Analysis, 4. Severity/Occurrence/Detection or Criticality Scoring, 5. Risk Ranking, 6. Maintenance Task Selection, 7. Action Register and Review. Prepare a complete formal Excel-style and PDF-ready report using the sample FMEA workbook package structure when the scope fits. Use clean Markdown tables so Excel export creates clear workbook sheets. Do not include diagrams unless the user explicitly requests them. Avoid naming protected technical publications, proprietary methods, or branded frameworks unless the user explicitly provides the name and asks for source-specific context. Complete each step before ending or moving on: ',
+        rca: TABLE_FORMAT_RULE + 'Using the Root Cause Analysis module. Use these steps: 1. Problem Definition, 2. Evidence and Timeline Capture, 3. Cause Analysis, 4. Root Cause Statement, 5. Corrective and Preventive Actions, 6. Verification and Effectiveness Review. Prepare a complete polished business-style RCA report with report header, current date, incident summary, evidence table, timeline, 5-Why analysis table, and mandatory RCA-only Figma/FigJam-ready visual diagrams for the downloadable report export. Include each diagram in this exact wrapper so the app can place it in the report export: [RCA_DIAGRAM: Diagram Title], then Mermaid graph LR syntax with quoted node labels, then [/RCA_DIAGRAM]. Do not expand large diagrams in the chat body. Complete each step before ending or moving on. Use Markdown tables for screen display and export: ',
+        analytics: TABLE_FORMAT_RULE + 'Using the Reliability Analytics module. Use these steps: 1. Data Definition and Assumptions, 2. Data Quality Screening, 3. Metric or Model Selection, 4. Calculation, 5. Result Interpretation, 6. Reliability Improvement Actions. Return complete calculations and results in tabulated report format suitable for Excel and PDF export. Do not include diagrams unless the user explicitly requests them: ',
+        review: TABLE_FORMAT_RULE + 'Using the Report Quality Review module. Use these steps: 1. Document Scope and Criteria, 2. Structure and Formatting Review, 3. Technical Completeness Review, 4. Data/Table/Calculation Check, 5. Findings Register, 6. Priority Correction Plan. Return complete findings in a tabulated audit report format with severity, evidence, recommendation, owner, and status columns. Do not include diagrams unless the user explicitly requests them: '
     };
 
     const MODULE_INTROS = {
@@ -992,7 +992,7 @@
     function containsMarkdownTable(text) {
         var lines = text.split(/\r?\n/);
         for (var i = 0; i < lines.length - 1; i++) {
-            if (isTableRow(lines[i]) && isSeparatorRow(lines[i + 1])) {
+            if (isTableStart(lines, i)) {
                 return true;
             }
         }
@@ -1005,17 +1005,50 @@
         var i = 0;
 
         while (i < lines.length) {
-            if (i < lines.length - 1 && isTableRow(lines[i]) && isSeparatorRow(lines[i + 1])) {
+            if (isTableStart(lines, i)) {
                 var headers = parseTableRow(lines[i]);
                 var rows = [];
                 i += 2;
 
-                while (i < lines.length && isTableRow(lines[i])) {
-                    rows.push(parseTableRow(lines[i]));
-                    i++;
+                while (i < lines.length) {
+                    if (isTableStart(lines, i)) {
+                        break;
+                    }
+
+                    if (isTableRow(lines[i])) {
+                        var row = parseTableRow(lines[i]);
+                        keepOrMergeTableRow(rows, row, headers, lines, i);
+                        i++;
+                        continue;
+                    }
+
+                    if (isIgnorableTableGap(lines, i)) {
+                        i++;
+                        continue;
+                    }
+
+                    if (isPartialTableRow(lines[i])) {
+                        var partialRow = parseTableRow(lines[i]);
+                        keepOrMergeTableRow(rows, partialRow, headers, lines, i);
+                        i++;
+                        continue;
+                    }
+
+                    break;
+                }
+
+                while (rows.length && rows[rows.length - 1].every(function (cell) { return !cell; })) {
+                    rows.pop();
                 }
 
                 output.push(buildHtmlTable(headers, rows));
+                continue;
+            }
+
+            if (isPlainTableStart(lines, i)) {
+                var plainTable = collectPlainTable(lines, i);
+                output.push(buildHtmlTable(plainTable.headers, plainTable.rows));
+                i = plainTable.nextIndex;
                 continue;
             }
 
@@ -1030,6 +1063,10 @@
         return /^\s*\|.+\|\s*$/.test(line || '');
     }
 
+    function isPartialTableRow(line) {
+        return /^\s*\|.+/.test(line || '') && !isTableRow(line) && parseTableRow(line).length > 1;
+    }
+
     function isSeparatorRow(line) {
         if (!isTableRow(line)) return false;
         var cells = parseTableRow(line);
@@ -1038,10 +1075,198 @@
         });
     }
 
+    function isTableStart(lines, index) {
+        return index < lines.length - 1 && isTableRow(lines[index]) && isSeparatorRow(lines[index + 1]);
+    }
+
     function parseTableRow(line) {
         return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (cell) {
             return cell.trim();
         });
+    }
+
+    function parsePlainTableRow(line) {
+        return String(line || '').split(/\t+/).map(function (cell) {
+            return cell.trim();
+        }).filter(function (cell) {
+            return cell.length > 0;
+        });
+    }
+
+    function parseLoosePipeCells(line) {
+        return String(line || '').split('|').map(function (cell) {
+            return cell.trim();
+        }).filter(function (cell) {
+            return cell.length > 0;
+        });
+    }
+
+    function isPlainTableStart(lines, index) {
+        var headers = parsePlainTableRow(lines[index]);
+        if (headers.length < 2) return false;
+        var next = nextMeaningfulLine(lines, index + 1);
+        if (!next || isTableStart(lines, next.index)) return false;
+        return isPlainTableDataLine(next.line) || isTableRow(next.line) || isPartialTableRow(next.line);
+    }
+
+    function isPlainTableDataLine(line) {
+        return parsePlainTableRow(line).length > 1;
+    }
+
+    function collectPlainTable(lines, startIndex) {
+        var headers = parsePlainTableRow(lines[startIndex]);
+        var rows = [];
+        var i = startIndex + 1;
+
+        while (i < lines.length) {
+            if (isSectionBreak(lines[i]) || isTableStart(lines, i)) {
+                break;
+            }
+
+            if (isBlankLine(lines[i])) {
+                var next = nextMeaningfulLine(lines, i + 1);
+                if (next && !isSectionBreak(next.line) && isPlainTableContinuationLine(next.line, rows, headers)) {
+                    i++;
+                    continue;
+                }
+                break;
+            }
+
+            if (isTableRow(lines[i]) || isPartialTableRow(lines[i])) {
+                keepOrMergeTableRow(rows, parseTableRow(lines[i]), headers, lines, i);
+                i++;
+                continue;
+            }
+
+            if (isPlainTableDataLine(lines[i])) {
+                keepOrMergeTableRow(rows, parsePlainTableRow(lines[i]), headers, lines, i);
+                i++;
+                continue;
+            }
+
+            if (isLoosePipeContinuation(lines[i], rows, headers)) {
+                mergeContinuationCells(rows[rows.length - 1], parseLoosePipeCells(lines[i]), headers);
+                i++;
+                continue;
+            }
+
+            if (shouldAppendTextToPreviousCell(rows, headers)) {
+                appendToPreviousCell(rows[rows.length - 1], lines[i]);
+                i++;
+                continue;
+            }
+
+            break;
+        }
+
+        return { headers: headers, rows: normalizeTableRows(rows, headers), nextIndex: i };
+    }
+
+    function isIgnorableTableGap(lines, index) {
+        if (!/^\s*$/.test(lines[index] || '')) return false;
+        var next = nextMeaningfulLine(lines, index + 1);
+        return next && !isTableStart(lines, next.index) && (isTableRow(next.line) || isPartialTableRow(next.line));
+    }
+
+    function shouldKeepTableRow(row, headers, lines, index) {
+        if (!row.length || row.every(function (cell) { return !cell; })) return false;
+        if (isDuplicatePartialRow(row, headers, lines, index)) return false;
+        return row.length <= headers.length + 2;
+    }
+
+    function keepOrMergeTableRow(rows, row, headers, lines, index) {
+        if (!shouldKeepTableRow(row, headers, lines, index)) return;
+        var previous = rows[rows.length - 1];
+        if (shouldMergeContinuationRow(previous, row, headers)) {
+            mergeContinuationCells(previous, row, headers);
+            return;
+        }
+        rows.push(row);
+    }
+
+    function shouldMergeContinuationRow(previous, row, headers) {
+        if (!previous || previous.length >= headers.length) return false;
+        if (!row.length || previous.length + row.length - 1 > headers.length) return false;
+        if (looksLikeNumberedTableRow(row)) return false;
+        if (previous.length < Math.max(2, Math.floor(headers.length / 2))) return false;
+        return row.length <= Math.max(3, headers.length - previous.length);
+    }
+
+    function mergeContinuationCells(previous, cells, headers) {
+        if (!previous || !cells.length) return;
+        if (previous.length + cells.length <= headers.length) {
+            Array.prototype.push.apply(previous, cells);
+            return;
+        }
+
+        appendToPreviousCell(previous, cells[0]);
+        Array.prototype.push.apply(previous, cells.slice(1));
+    }
+
+    function normalizeTableRows(rows, headers) {
+        return rows.map(function (row) {
+            var normalized = row.slice(0, headers.length);
+            while (normalized.length < headers.length) {
+                normalized.push('');
+            }
+            return normalized;
+        });
+    }
+
+    function isPlainTableContinuationLine(line, rows, headers) {
+        return isTableRow(line) ||
+            isPartialTableRow(line) ||
+            isPlainTableDataLine(line) ||
+            isLoosePipeContinuation(line, rows, headers);
+    }
+
+    function isLoosePipeContinuation(line, rows, headers) {
+        if (!rows.length || rows[rows.length - 1].length >= headers.length) return false;
+        var cells = parseLoosePipeCells(line);
+        return cells.length > 0 && cells.length <= headers.length;
+    }
+
+    function shouldAppendTextToPreviousCell(rows, headers) {
+        return rows.length > 0 && rows[rows.length - 1].length > 0 && rows[rows.length - 1].length < headers.length;
+    }
+
+    function appendToPreviousCell(row, text) {
+        var index = row.length - 1;
+        row[index] = (row[index] ? row[index] + ' ' : '') + String(text || '').trim();
+    }
+
+    function isBlankLine(line) {
+        return /^\s*$/.test(line || '');
+    }
+
+    function isSectionBreak(line) {
+        return /^\s*-{3,}\s*$/.test(line || '') || /^#{1,6}\s+\S/.test(line || '');
+    }
+
+    function looksLikeNumberedTableRow(row) {
+        var first = String(row[0] || '').trim();
+        return /^\d+$/.test(first) && row.length > 2;
+    }
+
+    function isDuplicatePartialRow(row, headers, lines, index) {
+        if (row.length >= headers.length) return false;
+        var next = nextMeaningfulLine(lines, index + 1);
+        if (!next || (!isTableRow(next.line) && !isPartialTableRow(next.line))) return false;
+        var nextRow = parseTableRow(next.line);
+        if (nextRow.length < headers.length || !row[0] || row[0] !== nextRow[0]) return false;
+        for (var i = 1; i < row.length; i++) {
+            if (row[i] !== nextRow[i]) return false;
+        }
+        return true;
+    }
+
+    function nextMeaningfulLine(lines, start) {
+        for (var i = start; i < lines.length; i++) {
+            if (!/^\s*$/.test(lines[i] || '')) {
+                return { line: lines[i], index: i };
+            }
+        }
+        return null;
     }
 
     function buildHtmlTable(headers, rows) {

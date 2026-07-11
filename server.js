@@ -89,19 +89,31 @@ When responding:
 - Show step-by-step analysis when appropriate
 - Format responses clearly with headers, bullet points, and tables when needed
 - Make every answer presentable before sending. Do not leave broken Markdown, split table headers, dangling parentheses, or table fragments.
+- For every capability, prepare both the chatbox response and downloadable report output to a high professional standard. The chatbox view must be clean, readable, management-presentable, and easy to scan; the exported PDF/Excel report must be complete, polished, consistently structured, and suitable for sharing with reliability, maintenance, operations, and management stakeholders.
+- Apply consistent report-quality formatting in all capabilities: clear section titles, compact metadata, complete methodology steps, concise business wording, aligned tables, consistent column names, complete action/register rows, assumptions where data is missing, review/approval fields for report outputs, and no casual filler.
+- Before sending any specialist output, perform a format-quality pass: verify that headings are coherent, tables render as tables, matrices contain all points inside the matrix/table, no rows or bullets are stranded outside their intended section, no duplicate partial rows remain, and the output looks professional in both chat and export.
 - If creating analyses, show actual data and calculations, not just templates
 - Always produce concrete outputs that the user can use directly
 - For simple definitions, formulas, examples, greetings, and short questions, answer directly and briefly. Do not expand into a full report unless the user asks for one.
 - In General mode, prioritize quick fast answers using concise wording. If the user needs a report, tell them to explicitly ask for "report format", "full report", "PDF-ready", or "Excel-ready" output so deeper report mode can be used.
 - Write formulas in plain English or simple mathematical notation that a normal browser can display, for example "MTBF = Total Operating Time / Number of Failures". Do not use LaTeX, TeX, MathML, "$$", "\\(...\\)", "\\[...\\]", "\\frac{}", "\\text{}", or other math-renderer syntax.
 - For broad or long-running work, first offer a compact option and a full-work option when scope is unclear or likely to take significant time.
+- For all specialist capability work, use methodology-first step execution. Before starting a substantive ECA, RCM/FMEA/FMECA, RCA, Reliability Analytics, or Report Review output, briefly show the methodological steps for that capability and ask the user to choose a compact scope, selected steps, or full workflow when the requested scope is unclear, broad, or likely to be long. Do not start deep analysis until the scope is clear.
+- Work in complete steps only. Never send a partial step, half table, half matrix, unfinished register, or incomplete calculation block. If the next methodological step is too large to complete cleanly in the current response, stop after the last fully completed step and end with: "Reply Continue to proceed with Step X." Do not begin Step X until the user continues.
+- When a user explicitly provides enough data and asks for a full report/workflow, proceed through the methodology in numbered steps. Each step must be internally complete before moving to the next step.
+- Methodology step sets by capability:
+  - ECA / Criticality Analysis: 1. Asset Definition; 2. Consequence Scoring; 3. Failure Mode Risk Assessment; 4. Frequency Assignment; 5. 5x5 Criticality Matrix; 6. Maintenance Strategy Selection.
+  - RCM / FMEA / FMECA: 1. System and Function Definition; 2. Functional Failure Identification; 3. Failure Mode and Effects Analysis; 4. Severity, Occurrence, Detection, or Criticality Scoring; 5. Risk Ranking and Prioritization; 6. Maintenance Task Selection; 7. Action Register and Review.
+  - RCA: 1. Problem Definition; 2. Evidence and Timeline Capture; 3. Cause Analysis; 4. Root Cause Statement; 5. Corrective and Preventive Actions; 6. Verification and Effectiveness Review.
+  - Reliability Analytics: 1. Data Definition and Assumptions; 2. Data Quality Screening; 3. Metric or Model Selection; 4. Calculation; 5. Result Interpretation; 6. Reliability Improvement Actions.
+  - Report Quality Review: 1. Document Scope and Criteria; 2. Structure and Formatting Review; 3. Technical Completeness Review; 4. Data/Table/Calculation Check; 5. Findings Register; 6. Priority Correction Plan.
 - If the request is unclear, illogical, technically inconsistent, missing asset/process context, or not reliability-engineering sound, ask one concise clarification question before doing analysis.
 - In specialist capability modes such as ECA, RCM/FMEA, RCA, Reliability Analytics, and Report Review, use deeper analysis behavior for substantive engineering work. If the user provides too little data, ask for the missing asset/system, operating context, evidence, or desired output format before working blindly.
 - For FMEA, FMECA, and RCM requests, prepare the answer as a formal report that is ready for Excel and PDF export.
 - For report requests, deliver the complete report in one response whenever possible. Do not stop after only an executive summary or partial table. Include all required sections, core registers, action plan, assumptions, review/approval fields, and export notes before ending.
-- For long reports or analysis that may exceed one response, complete the work in clear batches/sections and continue from where you stopped rather than restarting or timing out.
+- For long reports or analysis that may exceed one response, complete the work in clear methodological steps and continue from where you stopped rather than restarting or timing out. Never start a step that cannot be finished in the same response.
 - For very large report scopes, produce a compact but complete report rather than an unfinished long report: include representative rows, clear assumptions, and an action register, then state what additional source data would be needed for expansion.
-- Use Markdown tables for all report registers so the browser can render them as on-screen tables and export them to Excel. Do not use code blocks for report tables.
+- Use Markdown tables for all report registers so the browser can render them as on-screen tables and export them to Excel. Do not use tab-separated plain text tables or code blocks for report tables. Every report table must include a Markdown header row, a separator row such as "|---|---|", and complete pipe-delimited body rows.
 - Markdown table quality is mandatory: put a blank line before and after each table; keep each header on one line; never split a header across lines such as "Frequency (" then "12-month basis)"; use short readable headers such as "Frequency (12 months)"; every table row must have the same number of columns as the header; do not insert standalone text inside a table.
 - If a table would be too wide, split it into two smaller tables or move long explanations into notes below the table.
 - Use professional Excel-report style sections: Report Header, Executive Summary, Asset/System Definition, Assumptions, Methodology/Guidance, Analysis Register, Recommended Maintenance Plan, Action Tracker, and Review/Approval.
@@ -123,9 +135,9 @@ When responding:
   [/RCA_DIAGRAM]
 - RCA reports must include either a 5-Why analysis diagram or a fishbone cause diagram/matrix in the downloadable report export. Include both when the issue is complex or when enough evidence is provided. Do not expand large diagrams in the chat body; keep diagrams inside the report-export diagram wrapper and add an end note saying: "RCA visual diagrams are included in the downloadable report export and are not expanded in the chat window."
 - For non-RCA reports, do not add diagrams unless the user explicitly asks. Use management-ready tables, registers, summaries, and action trackers instead.
-- For Equipment Criticality Analysis reports, use numbered section headers and this order: 1. Report Header, 2. Executive Summary, 3. Asset Definition, 4. Criticality Methodology, 5. Consequence Scoring, 6. Failure Mode Risk Assessment, 7. Frequency Assignment, 8. 5x5 Criticality Matrix, 9. Risk Scoring Results, 10. Overall Criticality Classification, 11. Recommended Maintenance Strategy, 12. Action Register, 13. Assumptions and Limitations, 14. Review/Approval, 15. Export Notes.
+- For Equipment Criticality Analysis reports, organize the analytical body around these core methodology steps: 1. Asset Definition, 2. Consequence Scoring, 3. Failure Mode Risk Assessment, 4. Frequency Assignment, 5. 5x5 Criticality Matrix, 6. Maintenance Strategy Selection. Include Report Header, Executive Summary, Assumptions and Limitations, Review/Approval, and Export Notes as compact report wrapper sections where report format is requested.
 - ECA risk matrix formatting: render the 5x5 matrix as a complete Markdown table with headers "Severity / Frequency", "A Very Frequent", "B Frequent", "C Moderate", "D Infrequent", and "E Very Rare". Include all severity rows 5 to 1. Do not split or repeat matrix rows. Keep risk labels short: Critical, High, Medium, Low, Very Low.
-- ECA report tables must be complete before ending. Never leave a row half-written such as "| Bearing Failure | Bearing temperature monitoring | Predictive". If the answer cannot finish due to length, end with a clear note asking the user to reply "Continue" for the remaining sections.
+- ECA report tables must be complete before ending. Every ECA table row must begin and end with "|" and have the same number of cells as the header. Never leave a row half-written such as "| Bearing Failure | Bearing temperature monitoring | Predictive", never split trailing cells onto a new line such as "| 3.60 | 4 |", never resume the same table after a blank line, and never repeat a row after a partial version. If the answer cannot finish due to length, end with a clear note asking the user to reply "Continue" for the remaining sections.
 - Use current dates from the active system date. Do not copy historical dates from examples, samples, or uploaded report templates unless the user explicitly asks to preserve those dates.
 - When the user attaches files, treat the extracted attachment content as source material. Read it before answering, cite the file names used, and base the report on the attached data where relevant.
 - If an attached file or user request involves complex, safety-critical, environmental, production-critical, maintenance-strategy, financial, or approval-ready decisions and required context is missing, ask one concise clarification question and stop. Wait for the user's answer before preparing the final report.
@@ -730,7 +742,7 @@ function classifyRequest(messages, selectedModule = 'general', routeText = '') {
       model: FAST_MODEL,
       maxTokens: 420,
       enableWebSearch: false,
-      instruction: 'Ask one concise clarification question. Do not prepare the final report yet.'
+      instruction: 'Show the relevant methodology steps briefly, ask the user to choose compact scope, selected steps, or full workflow, and ask one concise clarification question. Do not prepare the final report yet.'
     };
   }
 
@@ -752,7 +764,7 @@ function classifyRequest(messages, selectedModule = 'general', routeText = '') {
       maxTokens: wantsDeepWork || hasAttachmentContext || capabilityNeedsDeep ? 14000 : 6000,
       enableWebSearch: true,
       webMaxUses: wantsDeepWork || hasAttachmentContext || capabilityNeedsDeep ? 4 : 2,
-      instruction: 'Use web search selectively for current or source-grounded information. Cite sources and keep the answer scoped to the user request. If the scope is too broad or missing key data, ask one concise clarification question before doing deep analysis.'
+      instruction: 'Use web search selectively for current or source-grounded information. Cite sources and keep the answer scoped to the user request. If the scope is too broad or missing key data, show the relevant methodology steps and ask one concise clarification question before doing deep analysis.'
     };
   }
 
@@ -763,7 +775,7 @@ function classifyRequest(messages, selectedModule = 'general', routeText = '') {
       model: analysisModel,
       maxTokens: 14000,
       enableWebSearch: false,
-      instruction: 'Do the requested reliability engineering work with deep/report mode. If the user explicitly asks for report format, complete the report with core sections, tables, assumptions, action items, review/approval fields, and export notes. If the scope is broad, illogical, or missing key data, ask one concise clarification question before analysis instead of guessing. If output is long, complete it in clear batches or continue sections rather than timing out.'
+      instruction: 'Do the requested reliability engineering work with deep/report mode using complete methodology steps. If the user explicitly asks for report format, complete the report with core sections, tables, assumptions, action items, review/approval fields, and export notes. If the scope is broad, illogical, or missing key data, show the relevant methodology steps and ask one concise clarification question before analysis instead of guessing. If output is long, finish the current step cleanly and ask the user to reply Continue before the next step.'
     };
   }
 
@@ -790,14 +802,71 @@ function shouldAskForScope(normalized, wordCount, hasAttachment, module, explici
   return bareReportRequest || vagueSystemRequest || impossibleCertainty || missingCriticalContext || thinCapabilityReport;
 }
 
-function scopeClarificationResponse() {
+function getMethodologyScopeText(module) {
+  const stepsByModule = {
+    eca: [
+      '1. Asset Definition',
+      '2. Consequence Scoring',
+      '3. Failure Mode Risk Assessment',
+      '4. Frequency Assignment',
+      '5. 5x5 Criticality Matrix',
+      '6. Maintenance Strategy Selection'
+    ],
+    rcm: [
+      '1. System and Function Definition',
+      '2. Functional Failure Identification',
+      '3. Failure Mode and Effects Analysis',
+      '4. Severity/Occurrence/Detection or Criticality Scoring',
+      '5. Risk Ranking and Prioritization',
+      '6. Maintenance Task Selection',
+      '7. Action Register and Review'
+    ],
+    rca: [
+      '1. Problem Definition',
+      '2. Evidence and Timeline Capture',
+      '3. Cause Analysis',
+      '4. Root Cause Statement',
+      '5. Corrective and Preventive Actions',
+      '6. Verification and Effectiveness Review'
+    ],
+    analytics: [
+      '1. Data Definition and Assumptions',
+      '2. Data Quality Screening',
+      '3. Metric or Model Selection',
+      '4. Calculation',
+      '5. Result Interpretation',
+      '6. Reliability Improvement Actions'
+    ],
+    review: [
+      '1. Document Scope and Criteria',
+      '2. Structure and Formatting Review',
+      '3. Technical Completeness Review',
+      '4. Data/Table/Calculation Check',
+      '5. Findings Register',
+      '6. Priority Correction Plan'
+    ]
+  };
+
+  const steps = stepsByModule[module] || [
+    '1. Define the reliability question',
+    '2. Confirm data and assumptions',
+    '3. Perform the analysis',
+    '4. Summarize findings',
+    '5. Recommend next actions'
+  ];
+
+  return `Methodological steps:\n${steps.join('\n')}`;
+}
+
+function scopeClarificationResponse(module = 'general') {
+  const methodology = getMethodologyScopeText(normalizeModuleName(module));
   return {
     id: 'scope-clarification',
     type: 'message',
     role: 'assistant',
     content: [{
       type: 'text',
-      text: 'Please clarify the scope before I prepare the analysis: what asset/system, failure scenario, operating context, and output depth do you want? For a faster response, ask for a quick sample; for full work, provide asset data and say “full report” or “report format”.'
+      text: `${methodology}\n\nBefore I prepare the analysis, please choose the scope: compact screening, selected methodology steps, or full workflow/report. Share the asset/system, failure scenario, operating context, and the step depth you want. I will complete each step fully and stop before the next large step if you need to reply "Continue".`
     }]
   };
 }
@@ -873,7 +942,7 @@ async function continueIfNeeded(route, originalMessages, data, signal, model) {
       { role: 'assistant', content: currentText },
       {
         role: 'user',
-        content: 'Continue and complete the report from exactly where you stopped. Do not restart. Include any remaining tables, actions, review/approval fields, and export notes. End only when the report is complete.'
+        content: 'Continue from exactly where you stopped. Do not restart. Complete the next methodology step fully, including any required tables, calculations, actions, review/approval fields, or export notes. If the following step is too large, stop after this complete step and ask the user to reply Continue.'
       }
     ]);
 
@@ -882,7 +951,7 @@ async function continueIfNeeded(route, originalMessages, data, signal, model) {
       model,
       enableWebSearch: false,
       maxTokens: Math.min(route.maxTokens || 8000, 10000),
-      instruction: `${route.instruction} Continue from the prior partial answer and finish the complete report.`
+      instruction: `${route.instruction} Continue from the prior answer by completing the next methodology step fully. Do not begin a step that cannot be completed in this response.`
     };
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -943,7 +1012,7 @@ function appendContinuationPrompt(data) {
   if (!data || !Array.isArray(data.content)) return data;
   data.content.push({
     type: 'text',
-    text: '\n\nNote: This output reached the response limit before all remaining sections could be completed. Reply "Continue" and I will continue from the next section without restarting.'
+    text: '\n\nNote: This output reached the response limit. Reply "Continue" and I will continue from the next complete methodology step without restarting.'
   });
   return data;
 }
@@ -1366,7 +1435,7 @@ app.post('/api/chat', requireVisitor, async (req, res) => {
 
   const route = classifyRequest(messages, selectedModule, routeText);
   if (route.type === 'clarify') {
-    return res.json(scopeClarificationResponse());
+    return res.json(scopeClarificationResponse(selectedModule));
   }
 
   const controller = new AbortController();
