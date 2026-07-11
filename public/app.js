@@ -28,7 +28,7 @@
         general: TABLE_FORMAT_RULE + 'Using the General module. Answer quick everyday reliability questions fast and directly using concise wording. Do not produce report format unless the user specifically asks for report format, PDF, Excel, or a full report. If the user asks for report format, prepare a structured report-ready output: ',
         eca: TABLE_FORMAT_RULE + 'Using the Equipment Criticality Analysis module. Use these steps: 1. Asset Definition, 2. Consequence Scoring, 3. Failure Mode Risk Assessment, 4. Frequency Assignment, 5. 5x5 Criticality Matrix, 6. Maintenance Strategy Selection. Return complete tabulated, report-ready output with Markdown tables suitable for Excel and PDF export. Do not include diagrams unless the user explicitly requests them. Complete each step before ending or moving on: ',
         rcm: TABLE_FORMAT_RULE + 'Using the RCM/FMEA Analysis module. Use these steps: 1. System and Function Definition, 2. Functional Failure Identification, 3. Failure Mode and Effects Analysis, 4. Severity/Occurrence/Detection or Criticality Scoring, 5. Risk Ranking, 6. Maintenance Task Selection, 7. Action Register and Review. Prepare a complete formal Excel-style and PDF-ready report using the sample FMEA workbook package structure when the scope fits. Use clean Markdown tables so Excel export creates clear workbook sheets. Do not include diagrams unless the user explicitly requests them. Avoid naming protected technical publications, proprietary methods, or branded frameworks unless the user explicitly provides the name and asks for source-specific context. Complete each step before ending or moving on: ',
-        rca: TABLE_FORMAT_RULE + 'Using the Root Cause Analysis module. Use these steps: 1. Problem Definition, 2. Evidence and Timeline Capture, 3. Cause Analysis, 4. Root Cause Statement, 5. Corrective and Preventive Actions, 6. Verification and Effectiveness Review. Prepare a complete polished business-style RCA report with report header, current date, incident summary, evidence table, timeline, 5-Why analysis table, and mandatory RCA-only Figma/FigJam-ready visual diagrams for the downloadable report export. Include each diagram in this exact wrapper so the app can place it in the report export: [RCA_DIAGRAM: Diagram Title], then Mermaid graph LR syntax with quoted node labels, then [/RCA_DIAGRAM]. Do not expand large diagrams in the chat body. Complete each step before ending or moving on. Use Markdown tables for screen display and export: ',
+        rca: TABLE_FORMAT_RULE + 'Using the Root Cause Analysis module. Use these steps: 1. Problem Definition, 2. Evidence and Timeline Capture, 3. Cause Analysis, 4. Root Cause Statement, 5. Corrective and Preventive Actions, 6. Verification and Effectiveness Review. Prepare a complete polished business-style RCA report with report header, current date, incident summary, evidence table, timeline, 5-Why analysis table, and mandatory RCA-only Figma/FigJam-ready visual diagrams for both the chatbox and downloadable report export. Include each diagram in this exact wrapper so the app can render it: [RCA_DIAGRAM: Diagram Title], then complete Mermaid graph LR syntax with quoted node labels, then [/RCA_DIAGRAM]. Do not use placeholder notes saying a diagram is prepared without providing the wrapper. Keep node labels short, use branching edges for fishbone/fault-tree/action-flow diagrams, and close every diagram block. Complete each step before ending or moving on. Use Markdown tables for screen display and export: ',
         analytics: TABLE_FORMAT_RULE + 'Using the Reliability Analytics module. Use these steps: 1. Data Definition and Assumptions, 2. Data Quality Screening, 3. Metric or Model Selection, 4. Calculation, 5. Result Interpretation, 6. Reliability Improvement Actions. Return complete calculations and results in tabulated report format suitable for Excel and PDF export. Do not include diagrams unless the user explicitly requests them: ',
         review: TABLE_FORMAT_RULE + 'Using the Report Quality Review module. Use these steps: 1. Document Scope and Criteria, 2. Structure and Formatting Review, 3. Technical Completeness Review, 4. Data/Table/Calculation Check, 5. Findings Register, 6. Priority Correction Plan. Return complete findings in a tabulated audit report format with severity, evidence, recommendation, owner, and status columns. Do not include diagrams unless the user explicitly requests them: '
     };
@@ -96,7 +96,7 @@
                 'Fishbone or cause-and-effect analysis',
                 'Corrective and preventive action plan',
                 'Verification/effectiveness checks',
-                'Report-only diagrams in PDF export'
+                'Figma-style diagrams in chat and PDF export'
             ],
             prompt: 'Try: Prepare an RCA for this repeated bearing failure event.'
         },
@@ -808,7 +808,9 @@
     // ── Markdown formatting ────────────────────────────────────────────
     function formatMessage(text) {
         text = normalizeMathText(text);
+        text = stripDeprecatedRcaDiagramNotes(text);
         var rcaDiagrams = [];
+        text = normalizeIncompleteRcaDiagramBlocks(text, rcaDiagrams);
         text = extractRcaDiagramBlocks(text, rcaDiagrams);
 
         // Tables first (before other replacements touch the pipe chars)
@@ -849,6 +851,17 @@
         });
     }
 
+    function normalizeIncompleteRcaDiagramBlocks(text, diagrams) {
+        return text.replace(/\[RCA_DIAGRAM:\s*([^\]]+)\]([\s\S]*)$/i, function (match, title, body) {
+            if (/\[\/RCA_DIAGRAM\]/i.test(body)) return match;
+            var token = '@@RCA_DIAGRAM_' + diagrams.length + '@@';
+            diagrams.push('<div class="rca-diagram-chat-note"><strong>RCA diagram incomplete:</strong> ' +
+                escapeHtml(title) +
+                '. Reply Continue so Reliabot can finish the complete diagram block for report export.</div>');
+            return token;
+        });
+    }
+
     function restoreRcaDiagramBlocks(text, diagrams) {
         diagrams.forEach(function (html, index) {
             text = text.replace('@@RCA_DIAGRAM_' + index + '@@', html);
@@ -856,11 +869,17 @@
         return text;
     }
 
+    function stripDeprecatedRcaDiagramNotes(text) {
+        return String(text || '')
+            .replace(/^RCA diagram prepared for report export:.*(?:\r?\n)?/gmi, '')
+            .replace(/^The visual diagram is included in the downloadable PDF report and is not expanded in the chat window\.\s*(?:\r?\n)?/gmi, '')
+            .replace(/^RCA visual diagrams are included in the downloadable report export.*(?:\r?\n)?/gmi, '');
+    }
+
     function buildRcaDiagramHtml(title, syntax) {
         var parsed = parseMermaidFlow(syntax);
         var note = '<div class="rca-diagram-chat-note">' +
-            '<strong>RCA diagram prepared for report export:</strong> ' + escapeHtml(title) +
-            '. The visual diagram is included in the downloadable PDF report and is not expanded in the chat window.' +
+            '<strong>RCA diagram rendered for chat and report export:</strong> ' + escapeHtml(title) +
         '</div>';
         if (!parsed.nodes.length) {
             return note + '<section class="rca-figma-diagram" data-title="' + escapeHtml(title) + '">' +
@@ -869,16 +888,23 @@
             '</section>';
         }
 
+        var columns = buildDiagramColumns(parsed);
+        var typeClass = getDiagramTypeClass(title);
         var html = note + '<section class="rca-figma-diagram" data-title="' + escapeHtml(title) + '">' +
             '<div class="rca-diagram-header">' + escapeHtml(title) + '</div>' +
-            '<div class="rca-diagram-canvas">';
+            '<div class="rca-diagram-canvas ' + typeClass + '">';
 
-        parsed.nodes.forEach(function (node, index) {
-            html += '<div class="rca-diagram-node" data-node="' + escapeHtml(node.id) + '">' +
-                '<span class="rca-node-index">' + (index + 1) + '</span>' +
-                '<span>' + escapeHtml(node.label) + '</span>' +
-            '</div>';
-            if (index < parsed.nodes.length - 1) {
+        columns.forEach(function (column, columnIndex) {
+            html += '<div class="rca-diagram-column" data-level="' + columnIndex + '">';
+            column.forEach(function (node, nodeIndex) {
+                var nodeClass = getDiagramNodeClass(node);
+                html += '<div class="rca-diagram-node ' + nodeClass + '" data-node="' + escapeHtml(node.id) + '">' +
+                    '<span class="rca-node-index">' + (columnIndex + 1) + '.' + (nodeIndex + 1) + '</span>' +
+                    '<span>' + escapeHtml(node.label) + '</span>' +
+                '</div>';
+            });
+            html += '</div>';
+            if (columnIndex < columns.length - 1) {
                 html += '<div class="rca-diagram-arrow" aria-hidden="true"></div>';
             }
         });
@@ -887,7 +913,7 @@
 
         if (parsed.edges.length) {
             html += '<div class="rca-diagram-links">';
-            parsed.edges.slice(0, 10).forEach(function (edge) {
+            parsed.edges.slice(0, 14).forEach(function (edge) {
                 html += '<span>' + escapeHtml(edge.fromLabel) + ' -> ' + escapeHtml(edge.toLabel) + '</span>';
             });
             html += '</div>';
@@ -902,7 +928,7 @@
         var order = [];
         var edges = [];
         String(syntax || '').split(/\r?\n/).forEach(function (line) {
-            var trimmed = line.trim();
+            var trimmed = line.trim().replace(/;$/, '');
             if (!trimmed || /^(graph|flowchart)\s+/i.test(trimmed)) return;
             var edge = parseMermaidEdge(trimmed);
             if (!edge) {
@@ -917,7 +943,8 @@
 
         return {
             nodes: order.map(function (id) { return nodeMap[id]; }),
-            edges: edges
+            edges: edges,
+            nodeMap: nodeMap
         };
     }
 
@@ -950,11 +977,81 @@
     }
 
     function cleanDiagramLabel(label) {
-        return String(label || '')
+        return sanitizeDiagramText(label)
             .replace(/^["']|["']$/g, '')
             .replace(/^\[/, '')
             .replace(/\]$/, '')
+            .replace(/^["']|["']$/g, '')
+            .replace(/\s+/g, ' ')
             .trim();
+    }
+
+    function sanitizeDiagramText(text) {
+        return String(text || '')
+            .replace(/&lt;\s*br\s*\/?\s*&gt;/gi, ' ')
+            .replace(/<\s*br\s*\/?\s*>/gi, ' ')
+            .replace(/\\n/g, ' ')
+            .replace(/\bbr\s*\/?\s*&gt;?/gi, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/[<>]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function buildDiagramColumns(parsed) {
+        var incoming = {};
+        var outgoing = {};
+        parsed.nodes.forEach(function (node) {
+            incoming[node.id] = 0;
+            outgoing[node.id] = [];
+        });
+        parsed.edges.forEach(function (edge) {
+            incoming[edge.to] = (incoming[edge.to] || 0) + 1;
+            outgoing[edge.from] = outgoing[edge.from] || [];
+            outgoing[edge.from].push(edge.to);
+        });
+
+        var roots = parsed.nodes.filter(function (node) { return !incoming[node.id]; });
+        if (!roots.length && parsed.nodes.length) roots = [parsed.nodes[0]];
+
+        var levels = {};
+        roots.forEach(function (root) { assignDiagramLevels(root.id, 0, outgoing, levels); });
+        parsed.nodes.forEach(function (node) {
+            if (typeof levels[node.id] !== 'number') levels[node.id] = 0;
+        });
+
+        var columns = [];
+        parsed.nodes.forEach(function (node) {
+            var level = Math.min(levels[node.id] || 0, 5);
+            columns[level] = columns[level] || [];
+            columns[level].push(node);
+        });
+        return columns.filter(function (column) { return column && column.length; });
+    }
+
+    function assignDiagramLevels(id, level, outgoing, levels) {
+        if (typeof levels[id] === 'number' && levels[id] >= level) return;
+        levels[id] = level;
+        (outgoing[id] || []).forEach(function (childId) {
+            assignDiagramLevels(childId, level + 1, outgoing, levels);
+        });
+    }
+
+    function getDiagramTypeClass(title) {
+        var normalized = String(title || '').toLowerCase();
+        if (/fishbone|cause-category|cause and effect|cause-and-effect/.test(normalized)) return 'rca-diagram-fishbone';
+        if (/fault|action-flow|action flow|tree/.test(normalized)) return 'rca-diagram-fault-tree';
+        return 'rca-diagram-flow';
+    }
+
+    function getDiagramNodeClass(node) {
+        var normalized = String((node && (node.id + ' ' + node.label)) || '').toLowerCase();
+        if (/root|problem|failure/.test(normalized)) return 'rca-node-root';
+        if (/corrective|immediate|ca-/.test(normalized)) return 'rca-node-corrective';
+        if (/preventive|pa-|control|monitor|training|handover/.test(normalized)) return 'rca-node-preventive';
+        return 'rca-node-standard';
     }
 
     function normalizeMathText(text) {
@@ -1730,6 +1827,9 @@
     function collectPdfBlocks(node, blocks) {
         if (!node || node.nodeType !== 1) return;
         var tag = node.tagName;
+        if (node.classList && node.classList.contains('rca-diagram-chat-note')) {
+            return;
+        }
         if (node.classList && node.classList.contains('rca-figma-diagram')) {
             blocks.push(extractPdfDiagram(node));
             return;
@@ -1791,14 +1891,41 @@
 
     function extractPdfDiagram(node) {
         var title = node.getAttribute('data-title') || cleanPdfText((node.querySelector('.rca-diagram-header') || {}).textContent);
-        var nodes = Array.from(node.querySelectorAll('.rca-diagram-node')).map(function (item) {
-            return cleanPdfText(item.textContent).replace(/^\d+\s*/, '');
+        var columns = Array.from(node.querySelectorAll('.rca-diagram-column')).map(function (column) {
+            return Array.from(column.querySelectorAll('.rca-diagram-node')).map(function (item) {
+                return cleanDiagramPdfLabel(item.textContent);
+            });
+        }).filter(function (column) {
+            return column.length > 0;
         });
-        return { type: 'diagram', title: title || 'RCA Diagram', nodes: nodes };
+        var nodes = Array.from(node.querySelectorAll('.rca-diagram-node')).map(function (item) {
+            return cleanDiagramPdfLabel(item.textContent);
+        });
+        return { type: 'diagram', title: cleanPdfText(title) || 'RCA Diagram', nodes: nodes, columns: columns };
     }
 
     function cleanPdfText(text) {
-        return String(text || '').replace(/\s+/g, ' ').trim();
+        return sanitizeReportText(text).replace(/\s+/g, ' ').trim();
+    }
+
+    function cleanDiagramPdfLabel(text) {
+        return sanitizeDiagramText(text)
+            .replace(/^\d+(?:\.\d+)?\s*/, '')
+            .replace(/\b(graph|flowchart)\s+(lr|td|tb|rl|bt)\b/gi, '')
+            .replace(/\bRCA_DIAGRAM\b/gi, '')
+            .replace(/\[[^\]]*$/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function sanitizeReportText(text) {
+        return String(text || '')
+            .replace(/&lt;\s*br\s*\/?\s*&gt;/gi, ' ')
+            .replace(/<\s*br\s*\/?\s*>/gi, ' ')
+            .replace(/\bbr\s*\/?\s*&gt;?/gi, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/\s+/g, ' ')
+            .trim();
     }
 
     function drawPdfTextBlock(pdf, page, block, y) {
@@ -1889,14 +2016,27 @@
 
     function drawPdfDiagram(pdf, page, diagram, y) {
         var maxWidth = page.width - page.marginX * 2;
-        var nodes = diagram.nodes.length ? diagram.nodes : ['Diagram data unavailable'];
-        var boxWidth = Math.min(42, Math.max(30, (maxWidth - Math.max(0, nodes.length - 1) * 8) / Math.min(nodes.length, 5)));
-        var boxHeight = 20;
-        var rows = [];
-        for (var i = 0; i < nodes.length; i += 5) {
-            rows.push(nodes.slice(i, i + 5));
-        }
-        var needed = 16 + rows.length * (boxHeight + 12);
+        var columns = diagram.columns && diagram.columns.length ? diagram.columns : [diagram.nodes.length ? diagram.nodes : ['Diagram data unavailable']];
+        var columnCount = Math.max(columns.length, 1);
+        var gap = 5;
+        var boxWidth = Math.min(42, Math.max(26, (maxWidth - (columnCount - 1) * gap) / columnCount));
+        var preparedColumns = columns.map(function (column) {
+            return column.map(function (label) {
+                var lines = pdf.splitTextToSize(cleanDiagramPdfLabel(label), boxWidth - 4);
+                return {
+                    label: label,
+                    lines: lines,
+                    height: Math.max(18, lines.length * 3.6 + 6)
+                };
+            });
+        });
+        var columnHeights = preparedColumns.map(function (column) {
+            return column.reduce(function (sum, item, index) {
+                return sum + item.height + (index > 0 ? 6 : 0);
+            }, 0);
+        });
+        var maxColumnHeight = Math.max.apply(null, columnHeights.concat([18]));
+        var needed = 18 + maxColumnHeight + 8;
         y = ensurePdfSpace(pdf, page, y, needed);
 
         pdf.setFillColor(15, 23, 42);
@@ -1908,29 +2048,35 @@
         pdf.text(cleanPdfText(diagram.title), page.marginX + 3, y + 6);
         y += 14;
 
-        rows.forEach(function (row) {
-            var totalRowWidth = row.length * boxWidth + Math.max(0, row.length - 1) * 8;
-            var x = page.marginX + Math.max(0, (maxWidth - totalRowWidth) / 2);
-            row.forEach(function (label, index) {
+        var startY = y;
+        preparedColumns.forEach(function (column, columnIndex) {
+            var x = page.marginX + columnIndex * (boxWidth + gap);
+            var nodeY = startY + Math.max(0, (maxColumnHeight - columnHeights[columnIndex]) / 2);
+            column.forEach(function (item) {
                 pdf.setFillColor(236, 254, 255);
                 pdf.setDrawColor(13, 148, 136);
-                pdf.roundedRect(x, y, boxWidth, boxHeight, 2, 2, 'FD');
+                if (columnIndex === 0) {
+                    pdf.setFillColor(224, 242, 254);
+                    pdf.setDrawColor(15, 23, 42);
+                }
+                pdf.roundedRect(x, nodeY, boxWidth, item.height, 2, 2, 'FD');
                 pdf.setTextColor(15, 23, 42);
                 pdf.setFont('helvetica', 'bold');
-                pdf.setFontSize(6.8);
-                pdf.text(pdf.splitTextToSize(label, boxWidth - 4), x + 2, y + 5);
-                if (index < row.length - 1) {
-                    pdf.setDrawColor(15, 23, 42);
-                    pdf.setLineWidth(0.5);
-                    pdf.line(x + boxWidth + 1.5, y + boxHeight / 2, x + boxWidth + 6.5, y + boxHeight / 2);
-                    pdf.triangle(x + boxWidth + 6.5, y + boxHeight / 2 - 1.8, x + boxWidth + 6.5, y + boxHeight / 2 + 1.8, x + boxWidth + 9, y + boxHeight / 2, 'F');
-                }
-                x += boxWidth + 8;
+                pdf.setFontSize(6.6);
+                pdf.text(item.lines, x + 2, nodeY + 5);
+                nodeY += item.height + 6;
             });
-            y += boxHeight + 12;
+
+            if (columnIndex < columns.length - 1) {
+                pdf.setDrawColor(15, 23, 42);
+                pdf.setLineWidth(0.5);
+                var lineY = startY + maxColumnHeight / 2;
+                pdf.line(x + boxWidth + 1, lineY, x + boxWidth + gap - 1.8, lineY);
+                pdf.triangle(x + boxWidth + gap - 1.8, lineY - 1.8, x + boxWidth + gap - 1.8, lineY + 1.8, x + boxWidth + gap + 0.8, lineY, 'F');
+            }
         });
 
-        return y + 2;
+        return startY + maxColumnHeight + 4;
     }
 
     function calculatePdfColumnWidths(table, usableWidth) {
