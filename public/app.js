@@ -1367,6 +1367,7 @@
     }
 
     function buildHtmlTable(headers, rows) {
+        headers = normalizeReportHeaders(headers, rows);
         var html = '<div class="matrix-container"><table class="matrix-table">';
         html += '<thead><tr>';
         headers.forEach(function (h) { html += '<th>' + formatInlineMarkdown(escapeHtml(h)) + '</th>'; });
@@ -1380,6 +1381,31 @@
         });
         html += '</tbody></table></div>';
         return html;
+    }
+
+    function normalizeReportHeaders(headers, rows) {
+        var normalized = (headers || []).map(function (header) {
+            return String(header || '').replace(/\s+/g, ' ').trim();
+        });
+        var firstDataCell = rows && rows.length && rows[0] ? String(rows[0][0] || '').trim() : '';
+        var combined = normalized.concat([firstDataCell]).join(' ').toLowerCase();
+
+        normalized = normalized.map(function (header, index) {
+            if (header) return header;
+            if (index === 0 && /\b(severity|frequency|very frequent|frequent|moderate|infrequent|rare|critical|high|medium|low)\b/.test(combined)) {
+                return 'Severity / Frequency';
+            }
+            if (index === 0 && /\b(score|rating|ranking|rank|rpn|risk)\b/.test(combined)) {
+                return 'Item';
+            }
+            return 'Column ' + (index + 1);
+        });
+
+        if (normalized.length > 1 && /^severity$/i.test(normalized[0]) && /\b(frequency|very frequent|frequent|rare)\b/i.test(normalized.slice(1).join(' '))) {
+            normalized[0] = 'Severity / Frequency';
+        }
+
+        return normalized;
     }
 
     function formatInlineMarkdown(text) {
@@ -1466,17 +1492,23 @@
             var headers = Array.from(table.querySelectorAll('thead th')).map(function (th) {
                 return th.textContent.trim();
             });
+            var bodyRows = [];
+            table.querySelectorAll('tbody tr').forEach(function (row) {
+                bodyRows.push(Array.from(row.querySelectorAll('td')).map(function (td) {
+                    return td.textContent.trim();
+                }));
+            });
+            headers = normalizeReportHeaders(headers, bodyRows);
             wsData.push([sectionTitle]);
             wsData.push(['Report Title', title]);
             wsData.push(['Generated', generatedAtText]);
             wsData.push([]);
             if (headers.length > 0) wsData.push(headers);
 
-            table.querySelectorAll('tbody tr').forEach(function (row) {
-                var rowData = Array.from(row.querySelectorAll('td')).map(function (td) {
-                    return td.textContent.trim();
-                });
-                wsData.push(rowData);
+            bodyRows.forEach(function (rowData) {
+                var normalizedRow = rowData.slice(0, headers.length);
+                while (normalizedRow.length < headers.length) normalizedRow.push('');
+                wsData.push(normalizedRow);
             });
 
             var ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -1512,6 +1544,28 @@
         if (!ws || !ws['!ref']) return;
         var range = XLSX.utils.decode_range(ws['!ref']);
         var headerRow = typeof headerRowIndex === 'number' ? headerRowIndex : range.s.r;
+        var palette = {
+            navy: 'FF0F172A',
+            teal: 'FF0F766E',
+            tealLight: 'FFCCFBF1',
+            blueLight: 'FFE0F2FE',
+            blueBand: 'FFF8FAFC',
+            border: 'FFCBD5E1',
+            white: 'FFFFFFFF',
+            text: 'FF0F172A',
+            muted: 'FF475569',
+            critical: 'FF991B1B',
+            high: 'FFDC2626',
+            medium: 'FFFDE68A',
+            low: 'FFBBF7D0',
+            veryLow: 'FFDBEAFE'
+        };
+        var thinBorder = {
+            top: { style: 'thin', color: { rgb: palette.border } },
+            bottom: { style: 'thin', color: { rgb: palette.border } },
+            left: { style: 'thin', color: { rgb: palette.border } },
+            right: { style: 'thin', color: { rgb: palette.border } }
+        };
         for (var row = range.s.r; row <= range.e.r; row++) {
             for (var col = range.s.c; col <= range.e.c; col++) {
                 var address = XLSX.utils.encode_cell({ r: row, c: col });
@@ -1519,22 +1573,43 @@
                 if (!cell) continue;
                 cell.s = cell.s || {};
                 cell.s.alignment = { vertical: 'top', wrapText: true };
+                cell.s.border = thinBorder;
+                var valueText = String(cell.v || '').trim();
+                var riskStyle = getExcelRiskStyle(valueText, palette);
                 if (row === range.s.r) {
-                    cell.s.font = { bold: true, color: { rgb: 'FF0F172A' }, sz: 15 };
-                    cell.s.fill = { fgColor: { rgb: 'FFE0F2FE' } };
+                    cell.s.font = { bold: true, color: { rgb: palette.white }, sz: 16 };
+                    cell.s.fill = { patternType: 'solid', fgColor: { rgb: palette.navy } };
                     cell.s.alignment = { vertical: 'center', wrapText: true };
+                } else if (row === 1 || row === 2) {
+                    cell.s.font = col === 0
+                        ? { bold: true, color: { rgb: palette.navy } }
+                        : { color: { rgb: palette.muted } };
+                    cell.s.fill = { patternType: 'solid', fgColor: { rgb: col === 0 ? palette.tealLight : palette.blueBand } };
                 } else if (row === headerRow) {
-                    cell.s.font = { bold: true, color: { rgb: 'FFFFFFFF' } };
-                    cell.s.fill = { fgColor: { rgb: 'FF0F172A' } };
+                    cell.s.font = { bold: true, color: { rgb: palette.white } };
+                    cell.s.fill = { patternType: 'solid', fgColor: { rgb: palette.teal } };
                     cell.s.alignment = { vertical: 'center', wrapText: true };
+                } else if (riskStyle) {
+                    cell.s.font = { bold: true, color: { rgb: riskStyle.text } };
+                    cell.s.fill = { patternType: 'solid', fgColor: { rgb: riskStyle.fill } };
                 } else if (row > headerRow && (row - headerRow) % 2 === 0) {
-                    cell.s.fill = { fgColor: { rgb: 'FFF8FAFC' } };
+                    cell.s.fill = { patternType: 'solid', fgColor: { rgb: palette.blueBand } };
                 }
             }
         }
         ws['!rows'] = Array.from({ length: Math.max(rowCount, 1) }, function (_, index) {
-            return { hpt: index === 0 ? 28 : index === headerRow ? 24 : 34 };
+            return { hpt: index === 0 ? 30 : index === headerRow ? 28 : 38 };
         });
+    }
+
+    function getExcelRiskStyle(value, palette) {
+        var normalized = String(value || '').trim().toUpperCase();
+        if (normalized === 'CRITICAL') return { fill: palette.critical, text: palette.white };
+        if (normalized === 'HIGH') return { fill: palette.high, text: palette.white };
+        if (normalized === 'MEDIUM') return { fill: palette.medium, text: 'FF78350F' };
+        if (normalized === 'LOW') return { fill: palette.low, text: 'FF14532D' };
+        if (normalized === 'VERY LOW') return { fill: palette.veryLow, text: 'FF1E3A8A' };
+        return null;
     }
 
     function getReportTitle(el) {
@@ -1879,6 +1954,7 @@
                 return cleanPdfText(cell.textContent);
             }) : [];
         }
+        headers = normalizeReportHeaders(headers, rows);
         rows = rows.map(function (row) {
             var normalized = row.slice(0, headers.length);
             while (normalized.length < headers.length) normalized.push('');
@@ -1962,15 +2038,23 @@
 
     function drawPdfTable(pdf, page, table, y) {
         if (!table.headers.length) return y;
+        table.headers = normalizeReportHeaders(table.headers, table.rows);
         var usableWidth = page.width - page.marginX * 2;
         var colCount = Math.max(table.headers.length, 1);
         var colWidths = calculatePdfColumnWidths(table, usableWidth);
         var compactTable = colCount > 8;
-        var headerHeight = compactTable ? 12.5 : 11;
+        var headerFontSize = compactTable ? 6.4 : 7.8;
+        var headerLineHeight = compactTable ? 3.25 : 3.8;
+        var headerLines = table.headers.map(function (header, index) {
+            return pdf.splitTextToSize(header || 'Column ' + (index + 1), Math.max(6, colWidths[index] - 3.4));
+        });
+        var headerHeight = Math.max(compactTable ? 12.5 : 11, Math.max.apply(null, headerLines.map(function (lines) {
+            return lines.length * headerLineHeight + 5.5;
+        })));
         var bodyFontSize = compactTable ? 7.2 : 8.2;
         var bodyLineHeight = compactTable ? 3.8 : 4.35;
         y = ensurePdfSpace(pdf, page, y, headerHeight + 12);
-        drawPdfTableHeader(pdf, page, table.headers, y, colWidths, headerHeight);
+        drawPdfTableHeader(pdf, page, table.headers, y, colWidths, headerHeight, headerLines, headerFontSize, headerLineHeight);
         y += headerHeight;
         table.rows.forEach(function (row, rowIndex) {
             var originalY = y;
@@ -1982,7 +2066,7 @@
             })));
             y = ensurePdfSpace(pdf, page, y, rowHeight + 6);
             if (y < originalY) {
-                drawPdfTableHeader(pdf, page, table.headers, y, colWidths, headerHeight);
+                drawPdfTableHeader(pdf, page, table.headers, y, colWidths, headerHeight, headerLines, headerFontSize, headerLineHeight);
                 y += headerHeight;
             }
             pdf.setFont('helvetica', 'normal');
@@ -2113,17 +2197,23 @@
         return widths;
     }
 
-    function drawPdfTableHeader(pdf, page, headers, y, colWidths, headerHeight) {
-        pdf.setFillColor(15, 23, 42);
+    function drawPdfTableHeader(pdf, page, headers, y, colWidths, headerHeight, preWrappedLines, fontSize, lineHeight) {
+        pdf.setFillColor(13, 116, 106);
         pdf.setDrawColor(15, 23, 42);
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(headers.length > 8 ? 7.2 : 8.2);
+        pdf.setFontSize(fontSize || (headers.length > 8 ? 7.2 : 8.2));
         pdf.setTextColor(255, 255, 255);
         var x = page.marginX;
         headers.forEach(function (header, index) {
             var colWidth = colWidths[index];
+            var lines = preWrappedLines && preWrappedLines[index]
+                ? preWrappedLines[index]
+                : pdf.splitTextToSize(header || 'Column ' + (index + 1), colWidth - 3.4);
             pdf.rect(x, y, colWidth, headerHeight, 'FD');
-            pdf.text(pdf.splitTextToSize(header, colWidth - 3.4), x + 1.7, y + 4.5);
+            pdf.text(lines, x + 1.7, y + 4.5, {
+                maxWidth: colWidth - 3.4,
+                lineHeightFactor: 1.05
+            });
             x += colWidth;
         });
     }
