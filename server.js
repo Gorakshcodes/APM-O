@@ -1101,7 +1101,7 @@ function replaceResponseText(data, text) {
 }
 
 function applyFinalResponseGuards(text) {
-  return correctRpnRiskLabels(String(text || '')
+  const sanitized = String(text || '')
     .replace(/\bwith recognized technical publication acceptance limits\b/gi, 'with site-defined acceptance limits')
     .replace(/\brecognized technical publication acceptance limits\b/gi, 'site-defined acceptance limits')
     .replace(/\brecognized technical publication\b/gi, 'site standard if available')
@@ -1109,7 +1109,9 @@ function applyFinalResponseGuards(text) {
     .replace(/\brecognized reliability reporting element\b/gi, 'reliability reporting element')
     .replace(/\brecognized business report wrapper\b/gi, 'report wrapper')
     .replace(/\brecognized report-register format\b/gi, 'report-register format')
-    .replace(/\bsite recognized\b/gi, 'site standard if available'));
+    .replace(/\brecognized preventive maintenance\b/gi, 'routine preventive maintenance')
+    .replace(/\bsite recognized\b/gi, 'site standard if available');
+  return normalizeRcaDiagramBlocks(correctRpnProse(normalizeEcaMatrixHeaders(correctRpnRiskLabels(sanitized))));
 }
 
 function classifyRpn(rpn) {
@@ -1150,6 +1152,64 @@ function correctRpnRiskLabels(text) {
     cells[activeTable.riskIndex] = expectedRisk;
     return `| ${cells.join(' | ')} |`;
   }).join('\n');
+}
+
+function normalizeEcaMatrixHeaders(text) {
+  return String(text || '')
+    .replace(/\|\s*Severity\s*\\+\s*Frequency\s*\|/gi, '| Severity / Frequency |')
+    .replace(/\|\s*Severity\s*\/\s*Frequency\s*\|/gi, '| Severity / Frequency |')
+    .replace(/\|\s*Severity\s+Frequency\s*\|/gi, '| Severity / Frequency |');
+}
+
+function correctRpnProse(text) {
+  let corrected = String(text || '');
+  corrected = corrected.replace(/\bRPN\s+(\d+(?:\.\d+)?)\s*\((Critical|High|Medium|Low|Very Low)\)/gi, (match, rpn) => {
+    const expectedRisk = classifyRpn(rpn);
+    return expectedRisk ? `RPN ${rpn} (${expectedRisk})` : match;
+  });
+  corrected = corrected
+    .replace(/\bRPN\s*>\s*200\s*=\s*(?:High|Medium|Low|Very Low)\b/gi, 'RPN > 200 = Critical')
+    .replace(/\b201\+\s*=\s*(?:High|Medium|Low|Very Low)\b/gi, '201+ = Critical')
+    .replace(/\b121\s*[–-]\s*200\s*=\s*(?:Critical|Medium|Low|Very Low)\b/gi, '121-200 = High')
+    .replace(/\b61\s*[–-]\s*120\s*=\s*(?:Critical|High|Low|Very Low)\b/gi, '61-120 = Medium')
+    .replace(/\b(?:≤|<=)\s*60\s*=\s*(?:Critical|High|Medium|Very Low)\b/gi, '<=60 = Low');
+
+  const hasCriticalRpn = /\bRPN\s+(?:20[1-9]|2[1-9]\d|[3-9]\d\d|\d{4,})\s*\(Critical\)/i.test(corrected) ||
+    /\|\s*(?:20[1-9]|2[1-9]\d|[3-9]\d\d|\d{4,})\s*\|\s*Critical\s*\|/i.test(corrected);
+  if (hasCriticalRpn) {
+    corrected = corrected
+      .replace(/\boverall\s+(pump|asset|system|equipment)\s+criticality\s+(is|=)\s+\*\*High\*\*/gi, 'overall $1 criticality $2 **Critical**')
+      .replace(/\bThe overall\s+(pump|asset|system|equipment)\s+criticality\s+(is|=)\s+High\b/gi, 'The overall $1 criticality $2 Critical');
+  }
+
+  return corrected;
+}
+
+function normalizeRcaDiagramBlocks(text) {
+  const source = String(text || '');
+  if (!/```mermaid/i.test(source)) return source;
+  if (/\[RCA_DIAGRAM:/i.test(source)) return source;
+  if (!/\b(root cause analysis|RCA|5-Why|Fishbone|Corrective and Preventive Action|seal leakage|root cause)\b/i.test(source)) {
+    return source;
+  }
+
+  let diagramIndex = 0;
+  return source.replace(/```mermaid\s*([\s\S]*?)```/gi, (match, syntax, offset) => {
+    const body = String(syntax || '').trim();
+    if (!/^(graph|flowchart)\s+(LR|TD|TB|RL|BT)\b/i.test(body)) return match;
+    diagramIndex += 1;
+    const title = inferRcaDiagramTitle(source.slice(0, offset), diagramIndex);
+    return `[RCA_DIAGRAM: ${title}]\n${body}\n[/RCA_DIAGRAM]`;
+  });
+}
+
+function inferRcaDiagramTitle(precedingText, diagramIndex) {
+  const headings = String(precedingText || '').match(/^#{2,4}\s+(.+)$/gmi) || [];
+  const latestHeading = headings.length ? headings[headings.length - 1].replace(/^#{2,4}\s+/, '').trim() : '';
+  if (/5-?why/i.test(latestHeading)) return 'Five-Why Root Cause Flow';
+  if (/fishbone|cause analysis|6m/i.test(latestHeading)) return 'Fishbone Cause Analysis';
+  if (/action|corrective|preventive/i.test(latestHeading)) return 'Fault-Tree Action Flow';
+  return `RCA Diagram ${diagramIndex}`;
 }
 
 function applyFinalResponseGuardsToData(data) {
