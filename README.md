@@ -25,13 +25,17 @@ npm install
 cp .env.example .env
 ```
 
-3. Add your Anthropic API key to `.env`:
+3. Add your model API keys to `.env`:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_QA_API_KEY=
+OPENAI_QA_MODEL=gpt-4.1-mini
 PORT=3000
 ADMIN_DASHBOARD_TOKEN=Sdvivs@407
 ```
+
+`OPENAI_QA_API_KEY` is optional. When configured, Reliabot runs a silent second-pass QA review before returning chat/report output. Do not commit real API keys; rotate any key that was pasted into chat or exposed publicly.
 
 4. Start the server:
 
